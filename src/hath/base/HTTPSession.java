@@ -28,8 +28,10 @@ import static hath.base.Tools.humanReadableByteCountBin;
 import javax.net.ssl.SSLSocket;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
@@ -43,7 +45,10 @@ public class HTTPSession implements Runnable {
 
     public static final String CRLF = "\r\n";
 
-    private static final Pattern getheadPattern = Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final DecimalFormat DECIMAL_FORMATTER = new DecimalFormat("#.##");
+
+    private static final Pattern getheadPattern =
+            Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss")
@@ -199,9 +204,6 @@ public class HTTPSession implements Runnable {
                         tcpBuffer.get(buffer, 0, lastWriteLen);
                         writer.write(buffer, 0, lastWriteLen);
                         writtenBytes += lastWriteLen;
-
-                        //Out.debug("Wrote " + lastWriteLen + " content bytes to socket for connId=" + connId + " with contentLength=" + contentLength);
-
                         if (!localNetworkAccess) {
                             Stats.bytesSent(lastWriteLen);
                         }
@@ -210,27 +212,32 @@ public class HTTPSession implements Runnable {
 
                 writer.flush();
 
-                DecimalFormat decimalFormatOneDecimalPoint = new DecimalFormat("#.##");
-
                 // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers, so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
                 long sendTime = System.currentTimeMillis() - startTime;
-                DecimalFormat df = new DecimalFormat("0.00");
                 Out.info(info + "Finished processing request in "
-                        + df.format(sendTime / 1000.0) + " seconds"
+                        + DECIMAL_FORMATTER.format(sendTime / 1000.0) + " seconds"
                         + (sendTime >= 10 ? "("
-                        + decimalFormatOneDecimalPoint.format((double) contentLength / sendTime / 1024.0 * 1000.0)
+                        + DECIMAL_FORMATTER.format((double) contentLength / sendTime / 1024.0 * 1000.0)
                         + " KB/s)" : ""));
             }
-        } catch (Exception e) {
-            Out.debug(info + "The connection was interrupted or closed by the remote host.");
+        } catch (SocketException e) {
+            Out.info(info + "The connection was interrupted or closed by the remote host.");
+            Out.info(e.getMessage());
+        } catch (IOException e) {
+            Out.debug(info + "IO Exception.");
             Out.debug(e.getMessage());
+        } catch (Exception e) {
+            Out.info(info + "???");
+            Out.info(e.getMessage());
         } finally {
             if (hpc != null) {
                 hpc.cleanup();
             }
 
             try {
-                reader.close();
+                if (reader != null) {
+                    reader.close();
+                }
                 writer.close();
             } catch (Exception ignored) {
             }
@@ -268,7 +275,8 @@ public class HTTPSession implements Runnable {
         } else {
             int startTimeout = hr != null ? (hr.isServercmd() ? 1800000 : 180000) : 30000;
 
-            return (sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout) || (lastPacketSend > 0 && lastPacketSend < nowtime - 30000);
+            return (sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout)
+                    || (lastPacketSend > 0 && lastPacketSend < nowtime - 30000);
         }
     }
 

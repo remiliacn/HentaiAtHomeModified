@@ -23,6 +23,8 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
-public interface OutListener extends java.util.EventListener {
+import java.util.EventListener;
+
+public interface OutListener extends EventListener {
 	void outputWritten(String entry);
 }

@@ -46,8 +46,13 @@ public class ProxyFileDownloader implements Runnable {
     private URLConnection connection;
     private final Thread myThread;
     private MessageDigest sha1Digest;
-    private int readoff, writeoff, contentLength;
-    private boolean streamThreadSuccess = false, streamThreadComplete = false, proxyThreadComplete = false, fileFinalized = false;
+    private int readoff;
+    private int writeoff;
+    private int contentLength;
+    private boolean streamThreadSuccess = false;
+    private boolean streamThreadComplete = false;
+    private boolean proxyThreadComplete = false;
+    private boolean fileFinalized = false;
     private final Object downloadLock = new Object();
 
     public ProxyFileDownloader(HentaiAtHomeClient client, String fileid, URL[] sources) {
@@ -70,7 +75,7 @@ public class ProxyFileDownloader implements Runnable {
 
         for (URL source : sources) {
             try {
-                Out.debug("ProxyFileDownloader: Requesting file download from " + source);
+                Out.debug("ProxyFileDownloader\tRequesting file download from " + source);
 
                 connection = source.openConnection();
                 connection.setConnectTimeout(5000);
@@ -149,7 +154,6 @@ public class ProxyFileDownloader implements Runnable {
                         if (is.available() > 0) {
                             time = 0;
                             readcount = rbc.read(byteBuffer);
-                            //Out.debug("Read " + readcount + " bytes from upstream server");
 
                             if (readcount >= 0) {
                                 readoff += readcount;
@@ -163,7 +167,6 @@ public class ProxyFileDownloader implements Runnable {
                                     writecount = fileChannel.write(byteBuffer, writeoff);
                                     writeoff += writecount;
                                     Stats.bytesRcvd(writecount);
-                                    //Out.debug("Wrote " + writecount + " bytes to " + tempFile);
                                     byteBuffer.clear();
                                 }
                             } else {
@@ -270,12 +273,12 @@ public class ProxyFileDownloader implements Runnable {
                 Out.debug("The file " + fileid + " is not in a static range, and will not be stored.");
             } else {
                 if (client.getCacheHandler().importFile(tempFile, requestedHVFile)) {
-                    Out.debug("Requested file " + fileid + " was successfully stored in cache.");
+                    Out.info("Requested file " + fileid + " was successfully stored in cache.");
                 } else {
-                    Out.debug("Requested file " + fileid + " exists or cannot be cached.");
+                    Out.info("Requested file " + fileid + " exists or cannot be cached.");
                 }
 
-                Out.debug("Proxy file download request complete for " + fileid);
+                Out.info("Proxy file download request complete for " + fileid);
             }
         }
 
