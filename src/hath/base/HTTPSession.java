@@ -210,15 +210,16 @@ public class HTTPSession implements Runnable {
 
                 writer.flush();
 
+                DecimalFormat decimalFormatOneDecimalPoint = new DecimalFormat("#.##");
+
                 // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers, so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
                 long sendTime = System.currentTimeMillis() - startTime;
                 DecimalFormat df = new DecimalFormat("0.00");
                 Out.info(info + "Finished processing request in "
                         + df.format(sendTime / 1000.0) + " seconds"
-                        + (sendTime >= 10 ? (
-                        " (" + humanReadableByteCountBin(contentLength / ((sendTime / 1000) <= 0 ? 1 : (sendTime / 1000))) + "/s)"
-                ) :
-                        ""));
+                        + (sendTime >= 10 ? "("
+                        + decimalFormatOneDecimalPoint.format((double) contentLength / sendTime / 1024.0 * 1000.0)
+                        + " KB/s)" : ""));
             }
         } catch (Exception e) {
             Out.debug(info + "The connection was interrupted or closed by the remote host.");
