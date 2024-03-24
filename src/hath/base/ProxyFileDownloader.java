@@ -63,7 +63,7 @@ public class ProxyFileDownloader implements Runnable {
 
     public int initialize() {
         // we'll need to run this in a private thread so we can push data to the originating client at the same time we download it (pass-through)
-        // this will NOT work with HTTPS (see FileDownloader), but upstream can be kept as HTTP so This Is Fine™
+        // this will NOT work with HTTPS (see FileDownloader), but upstream can be kept as HTTP so This Is Fine
 
         Out.debug("ProxyFileDownloader::initialize with fileid=" + fileid + " sources=" + Arrays.toString(sources));
         int retval = 500;
