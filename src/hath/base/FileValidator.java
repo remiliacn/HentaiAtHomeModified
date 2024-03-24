@@ -30,47 +30,46 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 
 public class FileValidator {
-	private MessageDigest messageDigest;
-	private ByteBuffer byteBuffer;
+    private MessageDigest messageDigest;
+    private final ByteBuffer byteBuffer;
 
-	public FileValidator() {
-		try {
-			messageDigest = MessageDigest.getInstance("SHA-1");
-		}
-		catch(java.security.NoSuchAlgorithmException e) {
-			HentaiAtHomeClient.dieWithError(e);
-		}
+    public FileValidator() {
+        try {
+            messageDigest = MessageDigest.getInstance("SHA-1");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            HentaiAtHomeClient.dieWithError(e);
+        }
 
-		byteBuffer = ByteBuffer.allocateDirect(65536);
-	}
-	
-	public boolean validateFile(Path path, String expectedSHA1Value) throws java.io.IOException {
-		FileChannel fileChannel = null;
+        byteBuffer = ByteBuffer.allocateDirect(65536);
+    }
 
-		try {
-			// usually byteBuffer would already be cleared and messageDigest would be reset at the end of the previous validation
-			// however, if the last run encountered an exception, this is not guaranteed, so we do it explicitly to avoid weirdness
-			messageDigest.reset();
-			byteBuffer.clear();
+    public boolean validateFile(Path path, String expectedSHA1Value) throws java.io.IOException {
+        FileChannel fileChannel = null;
 
-			fileChannel = FileChannel.open(path, StandardOpenOption.READ);
+        try {
+            // usually byteBuffer would already be cleared and messageDigest would be reset at the end of the previous validation
+            // however, if the last run encountered an exception, this is not guaranteed, so we do it explicitly to avoid weirdness
+            messageDigest.reset();
+            byteBuffer.clear();
 
-			while(fileChannel.read(byteBuffer) != -1) {
-				byteBuffer.flip();
-				// guaranteed to consume the buffer
-				messageDigest.update(byteBuffer);
-				byteBuffer.clear();
-			}
+            fileChannel = FileChannel.open(path, StandardOpenOption.READ);
 
-			return Tools.binaryToHex(messageDigest.digest()).equals(expectedSHA1Value);
-		}
-		finally {
-			// achievement unlocked: used non-contrived try/finally without catch
-			if(fileChannel != null) {
-				try {
-					fileChannel.close();
-				} catch(Exception e) {}
-			}
-		}
-	}
+            while (fileChannel.read(byteBuffer) != -1) {
+                byteBuffer.flip();
+                // guaranteed to consume the buffer
+                messageDigest.update(byteBuffer);
+                byteBuffer.clear();
+            }
+
+            return Tools.binaryToHex(messageDigest.digest()).equals(expectedSHA1Value);
+        } finally {
+            // achievement unlocked: used non-contrived try/finally without catch
+            if (fileChannel != null) {
+                try {
+                    fileChannel.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
 }

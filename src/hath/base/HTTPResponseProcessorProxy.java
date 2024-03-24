@@ -23,61 +23,61 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
-import java.lang.Thread;
 import java.net.URL;
 import java.nio.ByteBuffer;
 
 public class HTTPResponseProcessorProxy extends HTTPResponseProcessor {
-	private HTTPSession session;
-	private ProxyFileDownloader proxyDownloader;
-	private int readoff = 0;
-	private ByteBuffer tcpBuffer;
+    private final HTTPSession session;
+    private final ProxyFileDownloader proxyDownloader;
+    private int readoff = 0;
+    private ByteBuffer tcpBuffer;
 
-	public HTTPResponseProcessorProxy(HTTPSession session, String fileid, URL[] sources) {
-		this.session = session;
-		proxyDownloader = new ProxyFileDownloader(session.getHTTPServer().getHentaiAtHomeClient(), fileid, sources);
-	}
+    public HTTPResponseProcessorProxy(HTTPSession session, String fileid, URL[] sources) {
+        this.session = session;
+        proxyDownloader = new ProxyFileDownloader(session.getHTTPServer().getHentaiAtHomeClient(), fileid, sources);
+    }
 
-	public int initialize() {
-		Out.debug(session + ": Initializing proxy request...");
-		tcpBuffer = ByteBuffer.allocateDirect(Settings.TCP_PACKET_SIZE);
-		return proxyDownloader.initialize();
-	}
+    public int initialize() {
+        Out.debug(session + ": Initializing proxy request...");
+        tcpBuffer = ByteBuffer.allocateDirect(Settings.TCP_PACKET_SIZE);
+        return proxyDownloader.initialize();
+    }
 
-	public String getContentType() {
-		return proxyDownloader.getContentType();
-	}
+    public String getContentType() {
+        return proxyDownloader.getContentType();
+    }
 
-	public int getContentLength() {
-		return proxyDownloader.getContentLength();
-	}
+    public int getContentLength() {
+        return proxyDownloader.getContentLength();
+    }
 
-	public ByteBuffer getPreparedTCPBuffer() throws Exception {
-		tcpBuffer.clear();
-		
-		int timeout = 0;
-		int nextReadThrehold = Math.min(getContentLength(), readoff + tcpBuffer.limit());
-		//Out.debug("Filling buffer with limit=" + tcpBuffer.limit() + " at readoff=" + readoff + ", trying to read " + (nextReadThrehold - readoff) + " bytes up to byte " + nextReadThrehold);
+    public ByteBuffer getPreparedTCPBuffer() throws Exception {
+        tcpBuffer.clear();
 
-		while(nextReadThrehold > proxyDownloader.getCurrentWriteoff()) {
-			try {
-				Thread.currentThread().sleep(10);
-			} catch(Exception e) {}
+        int timeout = 0;
+        int nextReadThrehold = Math.min(getContentLength(), readoff + tcpBuffer.limit());
+        //Out.debug("Filling buffer with limit=" + tcpBuffer.limit() + " at readoff=" + readoff + ", trying to read " + (nextReadThrehold - readoff) + " bytes up to byte " + nextReadThrehold);
 
-			if(++timeout > 30000) {
-				// we have waited about five minutes, probably won't happen
-				throw new Exception("Timeout while waiting for proxy request.");
-			}
-		}
+        while (nextReadThrehold > proxyDownloader.getCurrentWriteoff()) {
+            try {
+                Thread.sleep(10);
+            } catch (Exception ignored) {
+            }
 
-		int readBytes = proxyDownloader.fillBuffer(tcpBuffer, readoff);
-		readoff += readBytes;
-		
-		tcpBuffer.flip();
-		return tcpBuffer;
-	}
+            if (++timeout > 30000) {
+                // we have waited about five minutes, probably won't happen
+                throw new Exception("Timeout while waiting for proxy request.");
+            }
+        }
 
-	public void requestCompleted() {
-		proxyDownloader.proxyThreadCompleted();
-	}
+        int readBytes = proxyDownloader.fillBuffer(tcpBuffer, readoff);
+        readoff += readBytes;
+
+        tcpBuffer.flip();
+        return tcpBuffer;
+    }
+
+    public void requestCompleted() {
+        proxyDownloader.proxyThreadCompleted();
+    }
 }

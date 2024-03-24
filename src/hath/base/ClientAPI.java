@@ -26,28 +26,25 @@ package hath.base;
 // note: this class can be invoked by local extentions to play with stuff
 
 public class ClientAPI {
-	public static final int API_COMMAND_CLIENT_START = 1;
-	public static final int API_COMMAND_CLIENT_SUSPEND = 2;
-	public static final int API_COMMAND_CLIENT_RESUME = 5;
-	public static final int API_COMMAND_MODIFY_SETTING = 3;
-	public static final int API_COMMAND_REFRESH_SETTINGS = 4;
-	
-	private HentaiAtHomeClient client;
+    public static final int API_COMMAND_CLIENT_SUSPEND = 2;
+    public static final int API_COMMAND_CLIENT_RESUME = 5;
 
-	public ClientAPI(HentaiAtHomeClient client) {
-		this.client = client;
-	}
-	
-	// available hooks for controlling the client
-	public ClientAPIResult clientSuspend(int suspendTime) {
-		return new ClientAPIResult(API_COMMAND_CLIENT_SUSPEND, client.suspendMasterThread(suspendTime) ? "OK" : "FAIL");	
-	}
-	
-	public ClientAPIResult clientResume() {
-		return new ClientAPIResult(API_COMMAND_CLIENT_RESUME, client.resumeMasterThread() ? "OK" : "FAIL");	
-	}
-	
-	public ClientAPIResult refreshSettings() {
-		return new ClientAPIResult(API_COMMAND_REFRESH_SETTINGS, client.getServerHandler().refreshServerSettings() ? "OK" : "FAIL");		
-	}
+    private final HentaiAtHomeClient client;
+
+    public ClientAPI(HentaiAtHomeClient client) {
+        this.client = client;
+    }
+
+    // available hooks for controlling the client
+    public ClientAPIResult clientSuspend(int suspendTime) {
+        return new ClientAPIResult(API_COMMAND_CLIENT_SUSPEND, client.suspendMasterThread(suspendTime) ? "OK" : "FAIL");
+    }
+
+    public ClientAPIResult clientResume() {
+        return new ClientAPIResult(API_COMMAND_CLIENT_RESUME, client.resumeMasterThread() ? "OK" : "FAIL");
+    }
+
+    public void refreshSettings() {
+        client.getServerHandler().refreshServerSettings();
+    }
 }

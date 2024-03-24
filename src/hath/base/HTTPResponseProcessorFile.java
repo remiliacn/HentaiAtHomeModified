@@ -24,84 +24,81 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 package hath.base;
 
 import java.nio.ByteBuffer;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 
 // this class provides provides a buffered interface to read a file in chunks
 
 public class HTTPResponseProcessorFile extends HTTPResponseProcessor {
-	private HVFile requestedHVFile;
-	private FileChannel fileChannel;
-	private ByteBuffer fileBuffer;
-	private int readoff = 0;
+    private final HVFile requestedHVFile;
+    private FileChannel fileChannel;
+    private ByteBuffer fileBuffer;
+    private int readoff = 0;
 
-	public HTTPResponseProcessorFile(HVFile requestedHVFile) {
-		this.requestedHVFile = requestedHVFile;
-	}
+    public HTTPResponseProcessorFile(HVFile requestedHVFile) {
+        this.requestedHVFile = requestedHVFile;
+    }
 
-	public int initialize() {
-		int responseStatusCode = 0;
+    public int initialize() {
+        int responseStatusCode;
 
-		try {
-			fileChannel = FileChannel.open(requestedHVFile.getLocalFilePath(), StandardOpenOption.READ);
-			fileBuffer = ByteBuffer.allocateDirect(Settings.isUseLessMemory() ? 8192 : 65536);
-			fileChannel.read(fileBuffer);
-			fileBuffer.flip();
-			responseStatusCode = 200;
-			Stats.fileSent();
-		}
-		catch(java.io.IOException e) {
-			Out.warning("Failed reading content from " + requestedHVFile.getLocalFilePath());
-			responseStatusCode = 500;
-		}
+        try {
+            fileChannel = FileChannel.open(requestedHVFile.getLocalFilePath(), StandardOpenOption.READ);
+            fileBuffer = ByteBuffer.allocateDirect(Settings.isUseLessMemory() ? 8192 : 65536);
+            fileChannel.read(fileBuffer);
+            fileBuffer.flip();
+            responseStatusCode = 200;
+            Stats.fileSent();
+        } catch (java.io.IOException e) {
+            Out.warning("Failed reading content from " + requestedHVFile.getLocalFilePath());
+            responseStatusCode = 500;
+        }
 
-		return responseStatusCode;
-	}
+        return responseStatusCode;
+    }
 
-	public void cleanup() {
-		if(fileChannel != null) {
-			try {
-				fileChannel.close();
-			} catch(Exception e) {}
-		}
-	}
+    public void cleanup() {
+        if (fileChannel != null) {
+            try {
+                fileChannel.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
 
-	public String getContentType() {
-		return requestedHVFile.getMimeType();
-	}
+    public String getContentType() {
+        return requestedHVFile.getMimeType();
+    }
 
-	public int getContentLength() {
-		if(fileChannel != null) {
-			return requestedHVFile.getSize();
-		}
-		else {
-			return 0;
-		}
-	}
+    public int getContentLength() {
+        if (fileChannel != null) {
+            return requestedHVFile.getSize();
+        } else {
+            return 0;
+        }
+    }
 
-	public ByteBuffer getPreparedTCPBuffer() throws Exception {
-		int readbytes = Math.min(getContentLength() - readoff, Settings.TCP_PACKET_SIZE);
+    public ByteBuffer getPreparedTCPBuffer() throws Exception {
+        int readbytes = Math.min(getContentLength() - readoff, Settings.TCP_PACKET_SIZE);
 
-		if(readbytes > fileBuffer.remaining()) {
-			int fileBytes = 0;
-			fileBuffer.compact();
+        if (readbytes > fileBuffer.remaining()) {
+            fileBuffer.compact();
 
-			while(readbytes > fileBuffer.position()) {
-				fileBytes += fileChannel.read(fileBuffer);
-			}
+            while (readbytes > fileBuffer.position()) {
+                fileChannel.read(fileBuffer);
+            }
 
-			fileBuffer.flip();
-			//Out.debug("Refilled buffer for " + requestedHVFile + " with " + fileBytes + " bytes, new remaining=" + fileBuffer.remaining());
-		}
+            fileBuffer.flip();
+            //Out.debug("Refilled buffer for " + requestedHVFile + " with " + fileBytes + " bytes, new remaining=" + fileBuffer.remaining());
+        }
 
-		//Out.debug("Reading from file " + requestedHVFile + ", readoff=" + readoff + ", readbytes=" + readbytes + ", remaining=" + fileBuffer.remaining());
+        //Out.debug("Reading from file " + requestedHVFile + ", readoff=" + readoff + ", readbytes=" + readbytes + ", remaining=" + fileBuffer.remaining());
 
-		ByteBuffer tcpBuffer = fileBuffer.slice();
-		tcpBuffer.limit(tcpBuffer.position() + readbytes);
-		fileBuffer.position(fileBuffer.position() + readbytes);
-		readoff += readbytes;
+        ByteBuffer tcpBuffer = fileBuffer.slice();
+        tcpBuffer.limit(tcpBuffer.position() + readbytes);
+        fileBuffer.position(fileBuffer.position() + readbytes);
+        readoff += readbytes;
 
-		return tcpBuffer;
-	}
+        return tcpBuffer;
+    }
 }

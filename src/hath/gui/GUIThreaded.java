@@ -29,14 +29,13 @@ import java.lang.Thread;
 public class GUIThreaded implements Runnable {
 	public static final int ACTION_SHUTDOWN = 1;
 	
-	private HentaiAtHomeClient client;
-	private Thread myThread;
-	private int action;
+	private final HentaiAtHomeClient client;
+    private final int action;
 
 	public GUIThreaded(HentaiAtHomeClient client, int action) {
 		this.client = client;
 		this.action = action;
-		myThread = new Thread(this);
+        Thread myThread = new Thread(this);
 		myThread.start();
 	}
 

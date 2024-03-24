@@ -24,8 +24,7 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 package hath.base;
 
 public interface HathGUI {
+    void notifyWarning(String title, String text);
 
-	public void notifyWarning(String title, String text);
-	public void notifyError(String reason);
-	
+    void notifyError(String reason);
 }

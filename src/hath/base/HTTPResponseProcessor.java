@@ -26,34 +26,35 @@ package hath.base;
 import java.nio.ByteBuffer;
 
 public abstract class HTTPResponseProcessor {
-	private String header = "";
+    private String header = "";
 
-	public String getContentType() {
-		return Settings.CONTENT_TYPE_DEFAULT;
-	}
+    public String getContentType() {
+        return Settings.CONTENT_TYPE_DEFAULT;
+    }
 
-	public int getContentLength() {
-		return 0;
-	}
-	
-	public int initialize() {
-		return 0;
-	}
-	
-	public void cleanup() {}
+    public int getContentLength() {
+        return 0;
+    }
 
-	public abstract ByteBuffer getPreparedTCPBuffer() throws Exception;
+    public int initialize() {
+        return 0;
+    }
 
-	public String getHeader() {
-		return this.header;
-	}
+    public void cleanup() {
+    }
 
-	public void addHeaderField(String name, String value) {
-		// TODO: encode the value if needed.
-		this.header += name + ": " + value + "\r\n";
-	}
-	
-	public void requestCompleted() {
-		// if the response processor needs to do some action after the request has completed, this can be overridden
-	}
+    public abstract ByteBuffer getPreparedTCPBuffer() throws Exception;
+
+    public String getHeader() {
+        return this.header;
+    }
+
+    public void addHeaderField(String name, String value) {
+        // TODO: encode the value if needed.
+        this.header += name + ": " + value + "\r\n";
+    }
+
+    public void requestCompleted() {
+        // if the response processor needs to do some action after the request has completed, this can be overridden
+    }
 }

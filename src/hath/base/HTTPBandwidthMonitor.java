@@ -23,72 +23,71 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
-import java.lang.Thread;
-
 public class HTTPBandwidthMonitor {
-	private final int TIME_RESOLUTION = 50;
-	private final int WINDOW_LENGTH = 5;
-	private int millisPerTick, bytesPerTick;
-	private int[] tickBytes, tickSeconds;
+    private static final int TIME_RESOLUTION = 50;
+    private static final int WINDOW_LENGTH = 5;
+    private final int millisPerTick;
+    private final int bytesPerTick;
+    private final int[] tickBytes;
+    private final int[] tickSeconds;
 
-	public HTTPBandwidthMonitor() {
-		bytesPerTick = (int) Math.ceil(Settings.getThrottleBytesPerSec() / TIME_RESOLUTION);
-		millisPerTick = (int) (1000 / TIME_RESOLUTION);
-		tickBytes = new int[TIME_RESOLUTION];
-		tickSeconds = new int[TIME_RESOLUTION];
-	}
+    public HTTPBandwidthMonitor() {
+        bytesPerTick = (int) Math.ceil((double) Settings.getThrottleBytesPerSec() / TIME_RESOLUTION);
+        millisPerTick = 1000 / TIME_RESOLUTION;
+        tickBytes = new int[TIME_RESOLUTION];
+        tickSeconds = new int[TIME_RESOLUTION];
+    }
 
-	public synchronized void waitForQuota(Thread thread, int bytecount) {
-		do {
-			long now = System.currentTimeMillis();
-			long epochSeconds = (long) (now / 1000);
-			int currentTick = (int) ((now - epochSeconds * 1000) / millisPerTick);
-			int currentSecond = (int) epochSeconds;
-			int bytesThisTick = 0, bytesLastWindow = 0, bytesLastSecond = 0;
-			int tickCounter = currentTick - TIME_RESOLUTION;
-			int tickIndex, validSecond;
+    public synchronized void waitForQuota(int bytecount) {
+        do {
+            long now = System.currentTimeMillis();
+            long epochSeconds = now / 1000;
+            int currentTick = (int) ((now - epochSeconds * 1000) / millisPerTick);
+            int currentSecond = (int) epochSeconds;
+            int bytesThisTick = 0, bytesLastWindow = 0, bytesLastSecond = 0;
+            int tickCounter = currentTick - TIME_RESOLUTION;
+            int tickIndex, validSecond;
 
-			while(++tickCounter <= currentTick) {
-				tickIndex = tickCounter < 0 ? TIME_RESOLUTION + tickCounter : tickCounter;
-				validSecond = tickCounter < 0 ? currentSecond - 1 : currentSecond;
+            while (++tickCounter <= currentTick) {
+                tickIndex = tickCounter < 0 ? TIME_RESOLUTION + tickCounter : tickCounter;
+                validSecond = tickCounter < 0 ? currentSecond - 1 : currentSecond;
 
-				if(tickSeconds[tickIndex] == validSecond) {
-					if(tickCounter == currentTick) {
-						bytesThisTick += tickBytes[tickIndex];
-					}
-					else {
-						if(tickCounter >= currentTick - WINDOW_LENGTH) {
-							bytesLastWindow += tickBytes[tickIndex];
-						}
+                if (tickSeconds[tickIndex] == validSecond) {
+                    if (tickCounter == currentTick) {
+                        bytesThisTick += tickBytes[tickIndex];
+                    } else {
+                        if (tickCounter >= currentTick - WINDOW_LENGTH) {
+                            bytesLastWindow += tickBytes[tickIndex];
+                        }
 
-						// technically, 49/50ths of a second
-						bytesLastSecond += tickBytes[tickIndex];
-					}
-				}
-			}
+                        // technically, 49/50ths of a second
+                        bytesLastSecond += tickBytes[tickIndex];
+                    }
+                }
+            }
 
-			if(bytesThisTick > bytesPerTick * 1.1 || bytesLastWindow > bytesPerTick * WINDOW_LENGTH * 1.05 || bytesLastSecond > bytesPerTick * TIME_RESOLUTION) {
-				//Out.debug("sleeping with currentTick=" + currentTick + " second=" + currentSecond + " bytesPerTick=" + bytesPerTick + " bytesThisTick=" + bytesThisTick + " bytesLastWindow=" + bytesLastWindow + " bytesLastSecond=" + bytesLastSecond);
+            if (bytesThisTick > bytesPerTick * 1.1 || bytesLastWindow > bytesPerTick * WINDOW_LENGTH * 1.05 || bytesLastSecond > bytesPerTick * TIME_RESOLUTION) {
+                //Out.debug("sleeping with currentTick=" + currentTick + " second=" + currentSecond + " bytesPerTick=" + bytesPerTick + " bytesThisTick=" + bytesThisTick + " bytesLastWindow=" + bytesLastWindow + " bytesLastSecond=" + bytesLastSecond);
 
-				try {
-					thread.sleep(10);
-				} catch(Exception e) {
-					e.printStackTrace();
-				}
+                try {
+                    Thread.sleep(10);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
 
-				continue;
-			}
+                continue;
+            }
 
-			//Out.debug("granted with currentTick=" + currentTick + " second=" + currentSecond + " bytesPerTick=" + bytesPerTick + " bytesThisTick=" + bytesThisTick + " bytesLastWindow=" + bytesLastWindow + " bytesLastSecond=" + bytesLastSecond);
+            //Out.debug("granted with currentTick=" + currentTick + " second=" + currentSecond + " bytesPerTick=" + bytesPerTick + " bytesThisTick=" + bytesThisTick + " bytesLastWindow=" + bytesLastWindow + " bytesLastSecond=" + bytesLastSecond);
 
-			if(tickSeconds[currentTick] != currentSecond) {
-				tickSeconds[currentTick] = currentSecond;
-				tickBytes[currentTick] = 0;
-			}
+            if (tickSeconds[currentTick] != currentSecond) {
+                tickSeconds[currentTick] = currentSecond;
+                tickBytes[currentTick] = 0;
+            }
 
-			tickBytes[currentTick] += bytecount;
+            tickBytes[currentTick] += bytecount;
 
-			break;
-		} while(true);
-	}
+            break;
+        } while (true);
+    }
 }

@@ -25,19 +25,19 @@ package hath.base;
 
 public class ClientAPIResult {
 
-	private int command;
-	private String resultText;
+    private final int command;
+    private final String resultText;
 
-	public ClientAPIResult(int command, String resultText) {
-		this.command = command;
-		this.resultText = resultText;
-	}
-	
-	public String getResultText() {
-		return resultText;
-	}
+    public ClientAPIResult(int command, String resultText) {
+        this.command = command;
+        this.resultText = resultText;
+    }
 
-	public String toString() {
-		return "{ClientAPIResult: command=" + command + ",  resultText=" + resultText + "}";
-	}
+    public String getResultText() {
+        return resultText;
+    }
+
+    public String toString() {
+        return "{ClientAPIResult: command=" + command + ",  resultText=" + resultText + "}";
+    }
 }

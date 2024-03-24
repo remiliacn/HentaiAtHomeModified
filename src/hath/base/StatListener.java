@@ -24,5 +24,5 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 package hath.base;
 
 public interface StatListener extends java.util.EventListener {
-	public void statChanged(String stat);
+	void statChanged(String stat);
 }

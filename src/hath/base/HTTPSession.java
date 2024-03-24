@@ -23,13 +23,15 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
+import static hath.base.Tools.humanReadableByteCountBin;
+
 import javax.net.ssl.SSLSocket;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -42,12 +44,12 @@ public class HTTPSession implements Runnable {
 
     private static final Pattern getheadPattern = Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
-    private SSLSocket socket;
-    private HTTPServer httpServer;
-    private int connId;
-    private Thread myThread;
-    private boolean localNetworkAccess;
-    private long sessionStartTime, lastPacketSend;
+    private final SSLSocket socket;
+    private final HTTPServer httpServer;
+    private final int connId;
+    private final boolean localNetworkAccess;
+    private final long sessionStartTime;
+    private long lastPacketSend;
     private HTTPResponse hr;
 
     public HTTPSession(SSLSocket socket, int connId, boolean localNetworkAccess, HTTPServer httpServer) {
@@ -59,7 +61,7 @@ public class HTTPSession implements Runnable {
     }
 
     public void handleSession() {
-        myThread = new Thread(this);
+        Thread myThread = new Thread(this);
         myThread.start();
     }
 
@@ -77,7 +79,7 @@ public class HTTPSession implements Runnable {
         BufferedReader reader = null;
         DataOutputStream writer = null;
         HTTPResponseProcessor hpc = null;
-        String info = this.toString() + " ";
+        String info = this + "\t";
 
         try {
             socket.setSoTimeout(10000);
@@ -87,14 +89,12 @@ public class HTTPSession implements Runnable {
 
             // read the header and parse the request - this will also update the response code and initialize the proper response processor
             String request = null;
-            int rcvdBytes = 0;
 
             // ignore every single line except for the request one. we SSL now, so if there is no end-of-line, just wait for the timeout
             do {
                 String read = reader.readLine();
 
                 if (read != null) {
-                    rcvdBytes += read.length();
 
                     if (getheadPattern.matcher(read).matches()) {
                         request = read.substring(0, Math.min(1000, read.length()));
@@ -107,7 +107,7 @@ public class HTTPSession implements Runnable {
             } while (true);
 
             hr = new HTTPResponse(this);
-            hr.parseRequest(request, localNetworkAccess);
+            hr.parseRequest(request);
 
             // get the status code and response processor - in case of an error, this will be a text type with the error message
             hpc = hr.getHTTPResponseProcessor();
@@ -122,27 +122,26 @@ public class HTTPSession implements Runnable {
             StringBuilder header = new StringBuilder(300);
             header.append(getHTTPStatusHeader(statusCode));
             header.append(hpc.getHeader());
-            header.append("Date: " + sdf.format(new Date()) + " GMT" + CRLF);
+            header.append("Date: ").append(sdf.format(new Date())).append(" GMT").append(CRLF);
             header.append("Server: Genetic Lifeform and Distributed Open Server " + Settings.CLIENT_VERSION + CRLF);
             header.append("Connection: close" + CRLF);
-            header.append("Content-Type: " + hpc.getContentType() + CRLF);
+            header.append("Content-Type: ").append(hpc.getContentType()).append(CRLF);
 
             if (contentLength > 0) {
                 header.append("Cache-Control: public, max-age=31536000" + CRLF);
-                header.append("Content-Length: " + contentLength + CRLF);
+                header.append("Content-Length: ").append(contentLength).append(CRLF);
             }
 
             header.append(CRLF);
 
             // write the header to the socket
-            byte[] headerBytes = header.toString().getBytes(Charset.forName("ISO-8859-1"));
+            byte[] headerBytes = header.toString().getBytes(StandardCharsets.ISO_8859_1);
 
             if (request != null && contentLength > 0) {
                 try {
                     // buffer size might be limited by OS. for linux, check net.core.wmem_max
                     int bufferSize = (int) Math.min(contentLength + headerBytes.length + 32, Math.min(Settings.isUseLessMemory() ? 131072 : 524288, Math.round(0.2 * Settings.getThrottleBytesPerSec())));
                     socket.setSendBufferSize(bufferSize);
-                    //Out.debug("Socket size for " + connId + " is now " + socket.getSendBufferSize() + " (requested " + bufferSize + ")");
                 } catch (Exception e) {
                     Out.info(e.getMessage());
                 }
@@ -151,7 +150,7 @@ public class HTTPSession implements Runnable {
             HTTPBandwidthMonitor bwm = httpServer.getBandwidthMonitor();
 
             if (bwm != null && !localNetworkAccess) {
-                bwm.waitForQuota(myThread, headerBytes.length);
+                bwm.waitForQuota(headerBytes.length);
             }
 
             writer.write(headerBytes, 0, headerBytes.length);
@@ -170,7 +169,7 @@ public class HTTPSession implements Runnable {
                 Out.info(info + (request == null ? "Invalid Request" : request));
             } else {
                 // if this is a GET request, process the body if we have one
-                info += "Code=" + statusCode + " Bytes=" + String.format("%1$-8s", contentLength) + " ";
+                info += "Code=" + statusCode + " Size=" + humanReadableByteCountBin(contentLength) + "\t";
 
                 if (request != null) {
                     // skip the startup message for error requests
@@ -181,7 +180,7 @@ public class HTTPSession implements Runnable {
 
                 if (contentLength > 0) {
                     int writtenBytes = 0;
-                    int lastWriteLen = 0;
+                    int lastWriteLen;
 
                     // bytebuffers returned by getPreparedTCPBuffer should never have a remaining() larger than Settings.TCP_PACKET_SIZE. if that happens due to some bug, we will hit an IndexOutOfBounds exception during the get below
                     byte[] buffer = new byte[Settings.TCP_PACKET_SIZE];
@@ -192,7 +191,7 @@ public class HTTPSession implements Runnable {
                         lastWriteLen = tcpBuffer.remaining();
 
                         if (bwm != null && !localNetworkAccess) {
-                            bwm.waitForQuota(myThread, lastWriteLen);
+                            bwm.waitForQuota(lastWriteLen);
                         }
 
                         tcpBuffer.get(buffer, 0, lastWriteLen);
@@ -212,12 +211,12 @@ public class HTTPSession implements Runnable {
                 // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers, so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
                 long sendTime = System.currentTimeMillis() - startTime;
                 DecimalFormat df = new DecimalFormat("0.00");
-                Out.info(info + "Finished processing request in " + df.format(sendTime / 1000.0) + " seconds" + (sendTime >= 10 ? " (" + df.format(contentLength / (float) sendTime) + " KB/s)" : ""));
+                Out.info(info + "Finished processing request in " + df.format(sendTime / 1000.0) + " seconds"
+                        + (sendTime >= 10 ? " (" + humanReadableByteCountBin(contentLength / (sendTime / 1000)) + "/s)" : ""));
             }
         } catch (Exception e) {
             Out.debug(info + "The connection was interrupted or closed by the remote host.");
-            Out.debug(e == null ? "(no exception)" : e.getMessage());
-            //e.printStackTrace();
+            Out.debug(e.getMessage());
         } finally {
             if (hpc != null) {
                 hpc.cleanup();
@@ -226,11 +225,11 @@ public class HTTPSession implements Runnable {
             try {
                 reader.close();
                 writer.close();
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
             try {
                 socket.close();
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
         }
 
@@ -238,28 +237,18 @@ public class HTTPSession implements Runnable {
     }
 
     private String getHTTPStatusHeader(int statuscode) {
-        switch (statuscode) {
-            case 200:
-                return "HTTP/1.1 200 OK" + CRLF;
-            case 301:
-                return "HTTP/1.1 301 Moved Permanently" + CRLF;
-            case 400:
-                return "HTTP/1.1 400 Bad Request" + CRLF;
-            case 403:
-                return "HTTP/1.1 403 Permission Denied" + CRLF;
-            case 404:
-                return "HTTP/1.1 404 Not Found" + CRLF;
-            case 405:
-                return "HTTP/1.1 405 Method Not Allowed" + CRLF;
-            case 418:
-                return "HTTP/1.1 418 I'm a teapot" + CRLF;
-            case 501:
-                return "HTTP/1.1 501 Not Implemented" + CRLF;
-            case 502:
-                return "HTTP/1.1 502 Bad Gateway" + CRLF;
-            default:
-                return "HTTP/1.1 500 Internal Server Error" + CRLF;
-        }
+        return switch (statuscode) {
+            case 200 -> "HTTP/1.1 200 OK" + CRLF;
+            case 301 -> "HTTP/1.1 301 Moved Permanently" + CRLF;
+            case 400 -> "HTTP/1.1 400 Bad Request" + CRLF;
+            case 403 -> "HTTP/1.1 403 Permission Denied" + CRLF;
+            case 404 -> "HTTP/1.1 404 Not Found" + CRLF;
+            case 405 -> "HTTP/1.1 405 Method Not Allowed" + CRLF;
+            case 418 -> "HTTP/1.1 418 I'm a teapot" + CRLF;
+            case 501 -> "HTTP/1.1 501 Not Implemented" + CRLF;
+            case 502 -> "HTTP/1.1 502 Bad Gateway" + CRLF;
+            default -> "HTTP/1.1 500 Internal Server Error" + CRLF;
+        };
     }
 
     public boolean doTimeoutCheck() {
@@ -272,12 +261,8 @@ public class HTTPSession implements Runnable {
         } else {
             int startTimeout = hr != null ? (hr.isServercmd() ? 1800000 : 180000) : 30000;
 
-            if ((sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout) || (lastPacketSend > 0 && lastPacketSend < nowtime - 30000)) {
-                return true;
-            }
+            return (sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout) || (lastPacketSend > 0 && lastPacketSend < nowtime - 30000);
         }
-
-        return false;
     }
 
     public void forceCloseSocket() {
@@ -302,12 +287,7 @@ public class HTTPSession implements Runnable {
         return socket.getInetAddress();
     }
 
-    public boolean isLocalNetworkAccess() {
-        return localNetworkAccess;
-    }
-
     public String toString() {
         return "{" + connId + String.format("%1$-17s", getSocketInetAddress().toString() + "}");
     }
-
 }

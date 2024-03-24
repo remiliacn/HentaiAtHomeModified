@@ -27,162 +27,153 @@ import java.io.File;
 import java.nio.file.Path;
 
 public class HVFile {
-	private String hash;
-	private int size;
-	private int xres;
-	private int yres;
-	private String type;
+    private final String hash;
+    private final int size;
+    private final int xres;
+    private final int yres;
+    private final String type;
 
-	private HVFile(String hash, int size, int xres, int yres, String type) {
-		this.hash = hash;
-		this.size = size;
-		this.xres = xres;
-		this.yres = yres;
-		this.type = type;
-	}
+    private HVFile(String hash, int size, int xres, int yres, String type) {
+        this.hash = hash;
+        this.size = size;
+        this.xres = xres;
+        this.yres = yres;
+        this.type = type;
+    }
 
-	public File getLocalFileRef() {
-		return new File(Settings.getCacheDir(), hash.substring(0, 2) + "/" + hash.substring(2, 4) + "/" + getFileid());
-	}
-	
-	public Path getLocalFilePath() {
-		return getLocalFileRef().toPath();
-	}
+    public File getLocalFileRef() {
+        return new File(Settings.getCacheDir(), hash.substring(0, 2) + "/" + hash.substring(2, 4) + "/" + getFileid());
+    }
 
-	public String getMimeType() {
-		if(type.equals("jpg")) {
-			return "image/jpeg";
-		}
+    public Path getLocalFilePath() {
+        return getLocalFileRef().toPath();
+    }
 
-		if(type.equals("png")) {
-			return "image/png";
-		}
+    public String getMimeType() {
+        if (type.equals("jpg")) {
+            return "image/jpeg";
+        }
 
-		if(type.equals("gif")) {
-			return "image/gif";
-		}
+        if (type.equals("png")) {
+            return "image/png";
+        }
 
-		if(type.equals("mp4")) {
-			return "video/mp4";
-		}
+        if (type.equals("gif")) {
+            return "image/gif";
+        }
 
-		if(type.equals("wbm")) {
-			return "video/webm";
-		}
+        if (type.equals("mp4")) {
+            return "video/mp4";
+        }
 
-		if(type.equals("wbp")) {
-			return "image/webp";
-		}
+        if (type.equals("wbm")) {
+            return "video/webm";
+        }
 
-		if(type.equals("avf")) {
-			return "image/avif";
-		}
+        if (type.equals("wbp")) {
+            return "image/webp";
+        }
 
-		if(type.equals("jxl")) {
-			return "image/jxl";
-		}
+        if (type.equals("avf")) {
+            return "image/avif";
+        }
 
-		return "application/octet-stream";
-	}
+        if (type.equals("jxl")) {
+            return "image/jxl";
+        }
 
-	public String getFileid() {
-		if(xres > 0) {
-			return hash + "-" + size + "-" + xres + "-" + yres + "-" + type;
-		}
-		else {
-			return hash + "-" + size + "-" + type;
-		}
-	}
-	
-	public String getHash() {
-		return hash;
-	}
-	
-	public int getSize() {
-		return size;
-	}
-	
-	public String getType() {
-		return type;
-	}
+        return "application/octet-stream";
+    }
 
-	public String getStaticRange() {
-		return hash.substring(0, 4);
-	}
+    public String getFileid() {
+        if (xres > 0) {
+            return hash + "-" + size + "-" + xres + "-" + yres + "-" + type;
+        } else {
+            return hash + "-" + size + "-" + type;
+        }
+    }
 
-	public static boolean isValidHVFileid(String fileid) {
-		return java.util.regex.Pattern.matches("^[a-f0-9]{40}-[0-9]{1,10}-[0-9]{1,5}-[0-9]{1,5}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$", fileid) || java.util.regex.Pattern.matches("^[a-f0-9]{40}-[0-9]{1,10}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$", fileid);
-	}
+    public String getHash() {
+        return hash;
+    }
 
-	public static HVFile getHVFileFromFile(File file) {
-		return getHVFileFromFile(file, null);
-	}
+    public int getSize() {
+        return size;
+    }
 
-	public static HVFile getHVFileFromFile(File file, FileValidator validator) {
-		if(file.exists()) {
-			String fileid = file.getName();
+    public String getStaticRange() {
+        return hash.substring(0, 4);
+    }
 
-			try {
-				HVFile hvFile = getHVFileFromFileid(fileid);
-				
-				if(hvFile == null) {
-					return null;
-				}
-				
-				if(file.length() != hvFile.getSize()) {
-					return null;
-				}
-				
-				if(validator != null) {
-					if(!validator.validateFile(file.toPath(), fileid.substring(0, 40))) {
-						return null;
-					}
-				}
-				
-				return hvFile;
-			}
-			catch(java.io.IOException e) {
-				e.printStackTrace();
-				Out.warning("Warning: Encountered IO error computing the hash value of " + file);
-			}
-		}
-		
-		return null;
-	}
+    public static boolean isValidHVFileid(String fileid) {
+        return java.util.regex.Pattern.matches("^[a-f0-9]{40}-[0-9]{1,10}-[0-9]{1,5}-[0-9]{1,5}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$", fileid) || java.util.regex.Pattern.matches("^[a-f0-9]{40}-[0-9]{1,10}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$", fileid);
+    }
 
-	public static HVFile getHVFileFromFileid(String fileid) {
-		if(isValidHVFileid(fileid)) {
-			try {
-				String[] fileidParts = fileid.split("-");
-				String hash = fileidParts[0];
-				int size = Integer.parseInt(fileidParts[1]);
+    public static HVFile getHVFileFromFile(File file) {
+        return getHVFileFromFile(file, null);
+    }
 
-				int xres = 0, yres = 0;
-				String type = null;
+    public static HVFile getHVFileFromFile(File file, FileValidator validator) {
+        if (file.exists()) {
+            String fileid = file.getName();
 
-				if(fileidParts.length == 3) {
-					type = fileidParts[2];
-				}
-				else {
-					xres = Integer.parseInt(fileidParts[2]);
-					yres = Integer.parseInt(fileidParts[3]);
-					type = fileidParts[4];
-				}
+            try {
+                HVFile hvFile = getHVFileFromFileid(fileid);
 
-				return new HVFile(hash, size, xres, yres, type);
-			}
-			catch(Exception e) {
-				Out.warning("Failed to parse fileid \"" + fileid + "\" : " + e);
-			}
-		}
-		else {
-			Out.warning("Invalid fileid \"" + fileid + "\"");
-		}
-		
-		return null;
-	}
-	
-	public String toString() {
-		return getFileid();
-	}
+                if (hvFile == null) {
+                    return null;
+                }
+
+                if (file.length() != hvFile.getSize()) {
+                    return null;
+                }
+
+                if (validator != null) {
+                    if (!validator.validateFile(file.toPath(), fileid.substring(0, 40))) {
+                        return null;
+                    }
+                }
+
+                return hvFile;
+            } catch (java.io.IOException e) {
+                e.printStackTrace();
+                Out.warning("Warning: Encountered IO error computing the hash value of " + file);
+            }
+        }
+
+        return null;
+    }
+
+    public static HVFile getHVFileFromFileid(String fileid) {
+        if (isValidHVFileid(fileid)) {
+            try {
+                String[] fileidParts = fileid.split("-");
+                String hash = fileidParts[0];
+                int size = Integer.parseInt(fileidParts[1]);
+
+                int xres = 0, yres = 0;
+                String type;
+
+                if (fileidParts.length == 3) {
+                    type = fileidParts[2];
+                } else {
+                    xres = Integer.parseInt(fileidParts[2]);
+                    yres = Integer.parseInt(fileidParts[3]);
+                    type = fileidParts[4];
+                }
+
+                return new HVFile(hash, size, xres, yres, type);
+            } catch (Exception e) {
+                Out.warning("Failed to parse fileid \"" + fileid + "\" : " + e);
+            }
+        } else {
+            Out.warning("Invalid fileid \"" + fileid + "\"");
+        }
+
+        return null;
+    }
+
+    public String toString() {
+        return getFileid();
+    }
 }

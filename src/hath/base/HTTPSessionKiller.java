@@ -24,29 +24,23 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 package hath.base;
 
 import java.util.List;
-import java.lang.Thread;
 
 public class HTTPSessionKiller implements Runnable {
-	private List<HTTPSession> remove;
-	private Thread rachel;
+    private final List<HTTPSession> remove;
+    private final Thread rachel;
 
-	public HTTPSessionKiller(List<HTTPSession> remove) {
-		this.remove = remove;
-		rachel = new Thread(this);
-	}
-	
-	public void satsuriku() {
-		rachel.start();
-	}
+    public HTTPSessionKiller(List<HTTPSession> remove) {
+        this.remove = remove;
+        rachel = new Thread(this);
+    }
 
-	public void run() {
-		Out.debug("Starting kill thread for " + remove.size() + " sessions");
+    public void satsuriku() {
+        rachel.start();
+    }
 
-		for(HTTPSession session : remove) {
-			// jama
-			session.forceCloseSocket();
-		}
-
-		Out.debug("Kill thread finished closing " + remove.size() + " sessions");
-	}
+    public void run() {
+        Out.debug("Starting kill thread for " + remove.size() + " sessions");
+        remove.forEach(HTTPSession::forceCloseSocket);
+        Out.debug("Kill thread finished closing " + remove.size() + " sessions");
+    }
 }

@@ -27,5 +27,5 @@ package hath.base;
 // (i.e. the client id and client key on first boot)
 
 public interface InputQueryHandler {
-	public String queryString(String querytext);
+	String queryString(String querytext);
 }

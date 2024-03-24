@@ -32,145 +32,142 @@ import java.io.OutputStreamWriter;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.Arrays;
 import java.util.Hashtable;
-import java.security.MessageDigest;
-import java.lang.StringBuilder;
 
 public class Tools {
-	public static File checkAndCreateDir(File dir) throws java.io.IOException {
-		if(dir.isFile()) {
-			dir.delete();
-		}
+    public static File checkAndCreateDir(File dir) throws java.io.IOException {
+        if (dir.isFile()) {
+            dir.delete();
+        }
 
-		if(!dir.isDirectory()) {
-			if(!dir.mkdirs()) {
-				throw new java.io.IOException("Could not create directory " + dir + "; check permissions and I/O errors.");
-			}
-		}
+        if (!dir.isDirectory()) {
+            if (!dir.mkdirs()) {
+                throw new java.io.IOException("Could not create directory " + dir + "; check permissions and I/O errors.");
+            }
+        }
 
-		return dir;
-	}
+        return dir;
+    }
 
-	public static String getStringFileContents(File file) throws java.io.IOException {
-		char[] cbuf = new char[(int) file.length()];
-		java.io.FileReader fr = new FileReader(file);
-		fr.read(cbuf);
-		fr.close();
-		return new String(cbuf);
-	}
+    public static String getStringFileContents(File file) throws java.io.IOException {
+        char[] cbuf = new char[(int) file.length()];
+        java.io.FileReader fr = new FileReader(file);
+        fr.read(cbuf);
+        fr.close();
+        return new String(cbuf);
+    }
 
-	public static void putStringFileContents(File file, String content) throws java.io.IOException {
-		java.io.FileWriter fw = new FileWriter(file);
-		fw.write(content);
-		fw.close();
-	}
-	
-	public static void putStringFileContents(File file, String content, String charset) throws java.io.IOException {
-		int fileLength = (int) content.length();
-		BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), charset));
-		bw.write(content, 0, fileLength);
-		bw.close();
-	}	
+    public static void putStringFileContents(File file, String content) throws java.io.IOException {
+        java.io.FileWriter fw = new FileWriter(file);
+        fw.write(content);
+        fw.close();
+    }
 
-	public static File[] listSortedFiles(File dir) {
-		File[] files = dir.listFiles();
+    public static void putStringFileContents(File file, String content, String charset) throws java.io.IOException {
+        int fileLength = content.length();
+        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), charset));
+        bw.write(content, 0, fileLength);
+        bw.close();
+    }
 
-		if(files != null) {
-			Arrays.sort(files);
-		}
+    public static File[] listSortedFiles(File dir) {
+        File[] files = dir.listFiles();
 
-		return files;
-	}
+        if (files != null) {
+            Arrays.sort(files);
+        }
 
-	public static Hashtable<String,String> parseAdditional(String additional) {
-		Hashtable<String,String> addTable = new Hashtable<String,String>();
+        return files;
+    }
 
-		if(additional != null) {
-			if(!additional.isEmpty()) {
-				String[] keyValuePairs = additional.trim().split(";");
+    public static Hashtable<String, String> parseAdditional(String additional) {
+        Hashtable<String, String> addTable = new Hashtable<>();
 
-				for(String kvPair : keyValuePairs) {
-					// you cannot get k=v with less than a three-characters string
-					if(kvPair.length() > 2) {
-						String[] kvPairParts = kvPair.trim().split("=", 2);
+        if (additional != null) {
+            if (!additional.isEmpty()) {
+                String[] keyValuePairs = additional.trim().split(";");
 
-						if(kvPairParts.length == 2) {
-							addTable.put(kvPairParts[0].trim(), kvPairParts[1].trim());
-						}
-						else {
-							Out.warning("Invalid kvPair: " + kvPair);
-						}
-					}
-				}
-			}
-		}
+                for (String kvPair : keyValuePairs) {
+                    // you cannot get k=v with less than a three-characters string
+                    if (kvPair.length() > 2) {
+                        String[] kvPairParts = kvPair.trim().split("=", 2);
 
-		return addTable;
-	}
+                        if (kvPairParts.length == 2) {
+                            addTable.put(kvPairParts[0].trim(), kvPairParts[1].trim());
+                        } else {
+                            Out.warning("Invalid kvPair: " + kvPair);
+                        }
+                    }
+                }
+            }
+        }
 
-	public static String getSHA1String(String stringToHash) {
-		String hash = null;
+        return addTable;
+    }
 
-		try {
-			hash = binaryToHex(MessageDigest.getInstance("SHA-1").digest(stringToHash.getBytes()));
-		}
-		catch(java.security.NoSuchAlgorithmException e) {
-			HentaiAtHomeClient.dieWithError(e);
-		}
+    public static String getSHA1String(String stringToHash) {
+        String hash = null;
 
-		return hash;
-	}
+        try {
+            hash = binaryToHex(MessageDigest.getInstance("SHA-1").digest(stringToHash.getBytes()));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            HentaiAtHomeClient.dieWithError(e);
+        }
 
-	public static String getSHA1String(File fileToHash) {
-		FileChannel fileChannel = null;
-		String hash = null;
+        return hash;
+    }
 
-		try {
-			fileChannel = FileChannel.open(fileToHash.toPath(), StandardOpenOption.READ);
-			MessageDigest messageDigest = MessageDigest.getInstance("SHA-1");
-			ByteBuffer byteBuffer = ByteBuffer.allocateDirect((int) Math.min(65536, fileToHash.length()));
+    public static String getSHA1String(File fileToHash) {
+        FileChannel fileChannel = null;
+        String hash = null;
 
-			while(fileChannel.read(byteBuffer) != -1) {
-				byteBuffer.flip();
-				messageDigest.update(byteBuffer);
-				byteBuffer.clear();
-			}
+        try {
+            fileChannel = FileChannel.open(fileToHash.toPath(), StandardOpenOption.READ);
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-1");
+            ByteBuffer byteBuffer = ByteBuffer.allocateDirect((int) Math.min(65536, fileToHash.length()));
 
-			hash = binaryToHex(messageDigest.digest());
-		}
-		catch(java.security.NoSuchAlgorithmException e) {
-			HentaiAtHomeClient.dieWithError(e);
-		}
-		catch(java.io.IOException e) {
-			Out.warning("Failed to calculate SHA-1 hash of file " + fileToHash + ": " + e.getMessage());
-		}
-		finally {
-			try {
-				fileChannel.close();
-			} catch(Exception e) {}
-		}
+            while (fileChannel.read(byteBuffer) != -1) {
+                byteBuffer.flip();
+                messageDigest.update(byteBuffer);
+                byteBuffer.clear();
+            }
 
-		return hash;
-	}
-	
-	public static String binaryToHex(byte[] data) {
-		StringBuilder sb = new StringBuilder(data.length * 2);
+            hash = binaryToHex(messageDigest.digest());
+        } catch (java.security.NoSuchAlgorithmException e) {
+            HentaiAtHomeClient.dieWithError(e);
+        } catch (java.io.IOException e) {
+            Out.warning("Failed to calculate SHA-1 hash of file " + fileToHash + ": " + e.getMessage());
+        } finally {
+            try {
+                if (fileChannel != null) {
+                    fileChannel.close();
+                }
+            } catch (Exception ignored) {
+            }
+        }
 
-		for(byte b : data) {
-			int i = (int) b & 0xff;
-			
-			if(i < 0x10) {
-				sb.append("0");
-			}
-			
-			sb.append(Integer.toHexString(i));
-		}
-		
-		return sb.toString().toLowerCase();
-	}
+        return hash;
+    }
+
+    public static String binaryToHex(byte[] data) {
+        StringBuilder sb = new StringBuilder(data.length * 2);
+
+        for (byte b : data) {
+            int i = (int) b & 0xff;
+
+            if (i < 0x10) {
+                sb.append("0");
+            }
+
+            sb.append(Integer.toHexString(i));
+        }
+
+        return sb.toString().toLowerCase();
+    }
 
     public static String humanReadableByteCountBin(long bytes) {
         long absB = bytes == Long.MIN_VALUE ? Long.MAX_VALUE : Math.abs(bytes);

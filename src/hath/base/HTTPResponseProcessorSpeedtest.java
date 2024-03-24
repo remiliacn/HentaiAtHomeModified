@@ -23,34 +23,35 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
-import java.util.Random;
 import java.nio.ByteBuffer;
+import java.util.Random;
 
 public class HTTPResponseProcessorSpeedtest extends HTTPResponseProcessor {
-	private int testsize = 0, writeoff = 0;
-	private final int randomLength = 8192;
-	private byte[] randomBytes;
+    private final int testsize;
+    private int writeoff = 0;
+    private final int randomLength = 8192;
+    private final byte[] randomBytes;
 
-	public HTTPResponseProcessorSpeedtest(int testsize) {
-		this.testsize = testsize;
-		Random rand = new Random();
-		randomBytes = new byte[randomLength];
-		rand.nextBytes(randomBytes);
-	}
+    public HTTPResponseProcessorSpeedtest(int testsize) {
+        this.testsize = testsize;
+        Random rand = new Random();
+        randomBytes = new byte[randomLength];
+        rand.nextBytes(randomBytes);
+    }
 
-	public int getContentLength() {
-		return testsize;
-	}
+    public int getContentLength() {
+        return testsize;
+    }
 
-	public ByteBuffer getPreparedTCPBuffer() throws Exception {
-		int bytecount = Math.min(getContentLength() - writeoff, Settings.TCP_PACKET_SIZE);
-		int startbyte = (int) Math.floor(Math.random() * (randomLength - bytecount));
+    public ByteBuffer getPreparedTCPBuffer() {
+        int bytecount = Math.min(getContentLength() - writeoff, Settings.TCP_PACKET_SIZE);
+        int startbyte = (int) Math.floor(Math.random() * (randomLength - bytecount));
 
-		// making this read-only is probably not necessary, but doing so is almost free, and we don't want anything messing with our precious random bytes
-		ByteBuffer buffer = ByteBuffer.wrap(randomBytes, startbyte, bytecount).asReadOnlyBuffer();
-		writeoff += bytecount;
+        // making this read-only is probably not necessary, but doing so is almost free, and we don't want anything messing with our precious random bytes
+        ByteBuffer buffer = ByteBuffer.wrap(randomBytes, startbyte, bytecount).asReadOnlyBuffer();
+        writeoff += bytecount;
 
-		// this was a wrap, so we do not flip
-		return buffer;
-	}
+        // this was a wrap, so we do not flip
+        return buffer;
+    }
 }

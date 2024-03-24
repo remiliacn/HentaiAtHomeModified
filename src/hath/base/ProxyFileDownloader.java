@@ -36,19 +36,19 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 
 public class ProxyFileDownloader implements Runnable {
-    private HentaiAtHomeClient client;
-    private HVFile requestedHVFile;
-    private String fileid;
-    private File tempFile = null, returnFile = null;
+    private final HentaiAtHomeClient client;
+    private final HVFile requestedHVFile;
+    private final String fileid;
+    private File tempFile = null;
     private RandomAccessFile fileHandle;
     private FileChannel fileChannel;
-    private URL[] sources;
+    private final URL[] sources;
     private URLConnection connection;
-    private Thread myThread;
+    private final Thread myThread;
     private MessageDigest sha1Digest;
     private int readoff, writeoff, contentLength;
     private boolean streamThreadSuccess = false, streamThreadComplete = false, proxyThreadComplete = false, fileFinalized = false;
-    private Object downloadLock = new Object();
+    private final Object downloadLock = new Object();
 
     public ProxyFileDownloader(HentaiAtHomeClient client, String fileid, URL[] sources) {
         this.client = client;
@@ -122,7 +122,7 @@ public class ProxyFileDownloader implements Runnable {
                     if (fileHandle != null) {
                         fileHandle.close();
                     }
-                } catch (Exception e2) {
+                } catch (Exception ignored) {
                 }
             }
         }
@@ -138,16 +138,11 @@ public class ProxyFileDownloader implements Runnable {
             ByteBuffer byteBuffer = ByteBuffer.allocateDirect(Math.min(contentLength, bufferSize));
 
             do {
-                InputStream is = null;
-                ReadableByteChannel rbc = null;
 
-                try {
-                    is = connection.getInputStream();
-                    rbc = Channels.newChannel(is);
-
+                try (InputStream is = connection.getInputStream(); ReadableByteChannel rbc = Channels.newChannel(is)) {
                     long downloadStart = System.currentTimeMillis();
-                    int readcount = 0;    // the number of bytes in the last read
-                    int writecount = 0;    // the number of bytes in the last write
+                    int readcount;    // the number of bytes in the last read
+                    int writecount;    // the number of bytes in the last write
                     int time = 0;        // counts the approximate time (in nanofortnights) since last byte was received
 
                     while (writeoff < contentLength) {
@@ -186,7 +181,7 @@ public class ProxyFileDownloader implements Runnable {
                             }
 
                             time += 5;
-                            Thread.currentThread().sleep(5);
+                            Thread.sleep(5);
                         }
                     }
 
@@ -198,15 +193,6 @@ public class ProxyFileDownloader implements Runnable {
                     byteBuffer.clear();
                     sha1Digest.reset();
                     Out.debug("Retrying.. (" + trycounter + " tries left)");
-                } finally {
-                    try {
-                        rbc.close();
-                    } catch (Exception e) {
-                    }
-                    try {
-                        is.close();
-                    } catch (Exception e) {
-                    }
                 }
             } while (!streamThreadSuccess && --trycounter > 0);
 
@@ -262,14 +248,14 @@ public class ProxyFileDownloader implements Runnable {
         if (fileChannel != null) {
             try {
                 fileChannel.close();
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
         }
 
         if (fileHandle != null) {
             try {
                 fileHandle.close();
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
         }
 

@@ -23,60 +23,59 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
-import java.nio.charset.Charset;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 public class HTTPResponseProcessorText extends HTTPResponseProcessor {
-	private byte[] responseBytes;
-	private int writeoff = 0;
-	private String contentType;
+    private final byte[] responseBytes;
+    private int writeoff = 0;
+    private final String contentType;
 
-	public HTTPResponseProcessorText(String responseBody) {
-		this(responseBody, "text/html");
-	}
+    public HTTPResponseProcessorText(String responseBody) {
+        this(responseBody, "text/html");
+    }
 
-	public HTTPResponseProcessorText(String responseBody, String mimeType) {
-		this(responseBody, mimeType, Charset.forName("ISO-8859-1"));
-	}
+    public HTTPResponseProcessorText(String responseBody, String mimeType) {
+        this(responseBody, mimeType, StandardCharsets.ISO_8859_1);
+    }
 
-	public HTTPResponseProcessorText(String responseBody, String mimeType, Charset charset) {
-		int strlen = responseBody.length();
+    public HTTPResponseProcessorText(String responseBody, String mimeType, Charset charset) {
+        int strlen = responseBody.length();
 
-		if(strlen > 0) {
-			Out.debug("Response Written:");
+        if (strlen > 0) {
+            Out.debug("Response Written:");
 
-			if(strlen < 10000) {
-				Out.debug(responseBody);
-			}
-			else {
-				Out.debug("tl;dw");
-			}
-		}
+            if (strlen < 10000) {
+                Out.debug(responseBody);
+            } else {
+                Out.debug("tl;dw");
+            }
+        }
 
-		responseBytes = responseBody.getBytes(charset);
-		contentType = mimeType + "; charset=" + charset.name();
-	}
+        responseBytes = responseBody.getBytes(charset);
+        contentType = mimeType + "; charset=" + charset.name();
+    }
 
-	public int getContentLength() {
-		if(responseBytes != null) {
-			return responseBytes.length;
-		}
-		else {
-			return 0;
-		}
-	}
+    public int getContentLength() {
+        if (responseBytes != null) {
+            return responseBytes.length;
+        } else {
+            return 0;
+        }
+    }
 
-	public String getContentType() {
-		return contentType;
-	}
+    public String getContentType() {
+        return contentType;
+    }
 
-	public ByteBuffer getPreparedTCPBuffer() throws Exception {
-		int bytecount = Math.min(getContentLength() - writeoff, Settings.TCP_PACKET_SIZE);
-		ByteBuffer buffer = ByteBuffer.wrap(responseBytes, writeoff, bytecount);
-		writeoff += bytecount;
+    public ByteBuffer getPreparedTCPBuffer() {
+        int bytecount = Math.min(getContentLength() - writeoff, Settings.TCP_PACKET_SIZE);
+        ByteBuffer buffer = ByteBuffer.wrap(responseBytes, writeoff, bytecount);
+        writeoff += bytecount;
 
-		// this was a wrap, so we do not flip
-		return buffer;
-	}
+        // this was a wrap, so we do not flip
+        return buffer;
+    }
 
 }

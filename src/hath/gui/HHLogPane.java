@@ -32,12 +32,12 @@ import java.awt.event.ComponentListener;
 
 public class HHLogPane extends JPanel implements OutListener, ComponentListener {
 	private final int LOG_LINE_COUNT = 100;
-	private JTextArea textArea;
-	private String[] loglines;
-	private StringBuilder stringBuilder;
+	private final JTextArea textArea;
+	private final String[] loglines;
+	private final StringBuilder stringBuilder;
 	private int logpointer = 0, logLinesSinceRebuild = 0;
 	private long lastLogDisplayRebuild = 0;
-	private Object logSyncer = new Object();
+	private final Object logSyncer = new Object();
 	private int stringCutoff = 142, displayLineCount = 18;
 	private boolean windowResized = false;
 
@@ -90,8 +90,8 @@ public class HHLogPane extends JPanel implements OutListener, ComponentListener 
 
 		if(windowResized) {
 			windowResized = false;
-			stringCutoff = Math.max(stringCutoff, (int) (getWidth() / 7));
-			displayLineCount = Math.max(1, Math.min(LOG_LINE_COUNT, (int) (getHeight() / 16)));
+			stringCutoff = Math.max(stringCutoff, getWidth() / 7);
+			displayLineCount = Math.max(1, Math.min(LOG_LINE_COUNT, getHeight() / 16));
 		}
 		else if( (logLinesSinceRebuild < 1) || (nowtime - lastLogDisplayRebuild < 500) ) {
 			return;

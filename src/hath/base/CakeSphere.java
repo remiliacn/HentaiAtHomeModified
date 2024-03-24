@@ -23,42 +23,36 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
-import java.lang.Thread;
-
 public class CakeSphere implements Runnable {
-	private Thread myThread;
-	private ServerHandler handler;
-	private HentaiAtHomeClient client;
-	private boolean doResume;
-	
-	public CakeSphere(ServerHandler handler, HentaiAtHomeClient client) {
-		myThread = new Thread(this);
-		this.handler = handler;
-		this.client = client;
-	}
-	
-	public void stillAlive(boolean resume) {
-		// Cake and grief counseling will be available at the conclusion of the test.
-		doResume = resume;
-		myThread.start();
-	}
-	
-	public void run() {
-		ServerResponse sr = ServerResponse.getServerResponse(ServerHandler.getServerConnectionURL(ServerHandler.ACT_STILL_ALIVE, doResume ? "resume" : ""), handler);
+    private final Thread myThread;
+    private final ServerHandler handler;
+    private boolean doResume;
 
-		if(sr.getResponseStatus() == ServerResponse.RESPONSE_STATUS_OK) {
-			Out.debug("Successfully performed a stillAlive test for the server.");
-			Stats.serverContact();
-		}
-		else if(sr.getResponseStatus() == ServerResponse.RESPONSE_STATUS_NULL) {
-			Settings.markRPCServerFailure(sr.getFailHost());
-			Out.warning("Failed to connect to the server for the stillAlive test. This is probably a temporary connection problem.");
-		}
-		else if(sr.getFailCode().startsWith("TERM_BAD_NETWORK")) {
-			client.dieWithError("Client is shutting down since the network is misconfigured; correct firewall/forwarding settings then restart the client.");
-		}
-		else {
-			Out.warning("Failed stillAlive test: (" + sr.getFailCode() + ") - will retry later");		
-		}	
-	}
+    public CakeSphere(ServerHandler handler) {
+        myThread = new Thread(this);
+        this.handler = handler;
+    }
+
+    public void stillAlive(boolean resume) {
+        // Cake and grief counseling will be available at the conclusion of the test.
+        doResume = resume;
+        myThread.start();
+    }
+
+    public void run() {
+        ServerResponse sr = ServerResponse.getServerResponse(
+                ServerHandler.getServerConnectionURL(ServerHandler.ACT_STILL_ALIVE, doResume ? "resume" : ""), handler);
+
+        if (sr.getResponseStatus() == ServerResponse.RESPONSE_STATUS_OK) {
+            Out.debug("Successfully performed a stillAlive test for the server.");
+            Stats.serverContact();
+        } else if (sr.getResponseStatus() == ServerResponse.RESPONSE_STATUS_NULL) {
+            Settings.markRPCServerFailure(sr.getFailHost());
+            Out.warning("Failed to connect to the server for the stillAlive test. This is probably a temporary connection problem.");
+        } else if (sr.getFailCode().startsWith("TERM_BAD_NETWORK")) {
+            HentaiAtHomeClient.dieWithError("Client is shutting down since the network is misconfigured; correct firewall/forwarding settings then restart the client.");
+        } else {
+            Out.warning("Failed stillAlive test: (" + sr.getFailCode() + ") - will retry later");
+        }
+    }
 }
