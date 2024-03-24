@@ -33,9 +33,10 @@ import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
-import java.text.SimpleDateFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
-import java.util.TimeZone;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class HTTPSession implements Runnable {
@@ -43,6 +44,11 @@ public class HTTPSession implements Runnable {
     public static final String CRLF = "\r\n";
 
     private static final Pattern getheadPattern = Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss")
+                    .localizedBy(Locale.US)
+                    .withZone(ZoneId.of("UTC"));
 
     private final SSLSocket socket;
     private final HTTPServer httpServer;
@@ -114,15 +120,14 @@ public class HTTPSession implements Runnable {
             int statusCode = hr.getResponseStatusCode();
             int contentLength = hpc.getContentLength();
 
-            // we'll create a new date formatter for each session instead of synchronizing on a shared formatter. (sdf is not thread-safe)
-            SimpleDateFormat sdf = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss", java.util.Locale.US);
-            sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-
             // build the header
             StringBuilder header = new StringBuilder(300);
             header.append(getHTTPStatusHeader(statusCode));
             header.append(hpc.getHeader());
-            header.append("Date: ").append(sdf.format(new Date())).append(" GMT").append(CRLF);
+            header.append("Date: ")
+                    .append(DATE_TIME_FORMATTER.format((new Date()).toInstant()))
+                    .append(" GMT")
+                    .append(CRLF);
             header.append("Server: Genetic Lifeform and Distributed Open Server " + Settings.CLIENT_VERSION + CRLF);
             header.append("Connection: close" + CRLF);
             header.append("Content-Type: ").append(hpc.getContentType()).append(CRLF);
@@ -154,9 +159,6 @@ public class HTTPSession implements Runnable {
             }
 
             writer.write(headerBytes, 0, headerBytes.length);
-
-            //Out.debug("Wrote " +  headerBytes.length + " header bytes to socket for connId=" + connId + " with contentLength=" + contentLength);
-
             if (!localNetworkAccess) {
                 Stats.bytesSent(headerBytes.length);
             }
@@ -211,8 +213,12 @@ public class HTTPSession implements Runnable {
                 // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers, so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
                 long sendTime = System.currentTimeMillis() - startTime;
                 DecimalFormat df = new DecimalFormat("0.00");
-                Out.info(info + "Finished processing request in " + df.format(sendTime / 1000.0) + " seconds"
-                        + (sendTime >= 10 ? " (" + humanReadableByteCountBin(contentLength / (sendTime / 1000)) + "/s)" : ""));
+                Out.info(info + "Finished processing request in "
+                        + df.format(sendTime / 1000.0) + " seconds"
+                        + (sendTime >= 10 ? (
+                        " (" + humanReadableByteCountBin(contentLength / ((sendTime / 1000) <= 0 ? 1 : (sendTime / 1000))) + "/s)"
+                ) :
+                        ""));
             }
         } catch (Exception e) {
             Out.debug(info + "The connection was interrupted or closed by the remote host.");
