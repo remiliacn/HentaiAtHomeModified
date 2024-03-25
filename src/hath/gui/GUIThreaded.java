@@ -35,7 +35,7 @@ public class GUIThreaded implements Runnable {
 	public GUIThreaded(HentaiAtHomeClient client, int action) {
 		this.client = client;
 		this.action = action;
-        Thread myThread = new Thread(this);
+        final Thread myThread = new Thread(this);
 		myThread.start();
 	}
 

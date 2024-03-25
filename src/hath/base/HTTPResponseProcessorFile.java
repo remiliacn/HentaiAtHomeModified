@@ -23,6 +23,7 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
@@ -49,7 +50,7 @@ public class HTTPResponseProcessorFile extends HTTPResponseProcessor {
             fileBuffer.flip();
             responseStatusCode = 200;
             Stats.fileSent();
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             Out.warning("Failed reading content from " + requestedHVFile.getLocalFilePath());
             responseStatusCode = 500;
         }
@@ -61,7 +62,7 @@ public class HTTPResponseProcessorFile extends HTTPResponseProcessor {
         if (fileChannel != null) {
             try {
                 fileChannel.close();
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
         }
     }
@@ -89,10 +90,7 @@ public class HTTPResponseProcessorFile extends HTTPResponseProcessor {
             }
 
             fileBuffer.flip();
-            //Out.debug("Refilled buffer for " + requestedHVFile + " with " + fileBytes + " bytes, new remaining=" + fileBuffer.remaining());
         }
-
-        //Out.debug("Reading from file " + requestedHVFile + ", readoff=" + readoff + ", readbytes=" + readbytes + ", remaining=" + fileBuffer.remaining());
 
         ByteBuffer tcpBuffer = fileBuffer.slice();
         tcpBuffer.limit(tcpBuffer.position() + readbytes);

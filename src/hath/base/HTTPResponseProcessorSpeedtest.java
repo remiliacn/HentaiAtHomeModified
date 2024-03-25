@@ -27,29 +27,29 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 
 public class HTTPResponseProcessorSpeedtest extends HTTPResponseProcessor {
-    private final int testsize;
-    private int writeoff = 0;
-    private final int randomLength = 8192;
+    private final int testSize;
+    private int writeOff = 0;
     private final byte[] randomBytes;
+    private static final int RANDOM_LENGTH = 8192;
 
-    public HTTPResponseProcessorSpeedtest(int testsize) {
-        this.testsize = testsize;
+    public HTTPResponseProcessorSpeedtest(int testSize) {
+        this.testSize = testSize;
         Random rand = new Random();
-        randomBytes = new byte[randomLength];
+        randomBytes = new byte[RANDOM_LENGTH];
         rand.nextBytes(randomBytes);
     }
 
     public int getContentLength() {
-        return testsize;
+        return testSize;
     }
 
     public ByteBuffer getPreparedTCPBuffer() {
-        int bytecount = Math.min(getContentLength() - writeoff, Settings.TCP_PACKET_SIZE);
-        int startbyte = (int) Math.floor(Math.random() * (randomLength - bytecount));
+        int bytecount = Math.min(getContentLength() - writeOff, Settings.TCP_PACKET_SIZE);
+        int startbyte = (int) Math.floor(Math.random() * (RANDOM_LENGTH - bytecount));
 
         // making this read-only is probably not necessary, but doing so is almost free, and we don't want anything messing with our precious random bytes
         ByteBuffer buffer = ByteBuffer.wrap(randomBytes, startbyte, bytecount).asReadOnlyBuffer();
-        writeoff += bytecount;
+        writeOff += bytecount;
 
         // this was a wrap, so we do not flip
         return buffer;

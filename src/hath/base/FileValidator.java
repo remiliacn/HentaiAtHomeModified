@@ -23,6 +23,7 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
@@ -32,6 +33,7 @@ import java.security.MessageDigest;
 public class FileValidator {
     private MessageDigest messageDigest;
     private final ByteBuffer byteBuffer;
+    private static final int CAPACITY = 65536;
 
     public FileValidator() {
         try {
@@ -40,7 +42,7 @@ public class FileValidator {
             HentaiAtHomeClient.dieWithError(e);
         }
 
-        byteBuffer = ByteBuffer.allocateDirect(65536);
+        byteBuffer = ByteBuffer.allocateDirect(CAPACITY);
     }
 
     public boolean validateFile(Path path, String expectedSHA1Value) throws java.io.IOException {
@@ -67,7 +69,7 @@ public class FileValidator {
             if (fileChannel != null) {
                 try {
                     fileChannel.close();
-                } catch (Exception ignored) {
+                } catch (IOException ignored) {
                 }
             }
         }

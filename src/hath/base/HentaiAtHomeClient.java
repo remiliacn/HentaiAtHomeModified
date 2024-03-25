@@ -48,9 +48,17 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
+import java.io.IOException;
+
 public class HentaiAtHomeClient implements Runnable {
-    private final InputQueryHandler iqh;
-    private boolean shutdown, reportShutdown, fastShutdown, threadInterruptable, doCertRefresh;
+    public static final String[] EXIT_MESSAGES =
+            new String[]{"I don't hate you", "Whyyyyyyyy...", "No hard feelings", "Your business is appreciated", "Good-night"};
+    private final InputQueryHandler inputQueryHandler;
+    private boolean shutdown;
+    private boolean reportShutdown;
+    private boolean fastShutdown;
+    private boolean threadInterruptable;
+    private boolean doCertRefresh;
     private HTTPServer httpServer;
     private ClientAPI clientAPI;
     private CacheHandler cacheHandler;
@@ -62,8 +70,8 @@ public class HentaiAtHomeClient implements Runnable {
     private long suspendedUntil;
     private final String[] args;
 
-    public HentaiAtHomeClient(InputQueryHandler iqh, String[] args) {
-        this.iqh = iqh;
+    public HentaiAtHomeClient(InputQueryHandler inputQueryHandler, String[] args) {
+        this.inputQueryHandler = inputQueryHandler;
         this.args = args;
         shutdown = false;
         reportShutdown = false;
@@ -85,7 +93,7 @@ public class HentaiAtHomeClient implements Runnable {
 
         try {
             Settings.initializeDirectories();
-        } catch (java.io.IOException ioe) {
+        } catch (IOException ioe) {
             Out.error("Could not create program directories. Check file access permissions and free disk space.");
             System.exit(-1);
         }
@@ -93,7 +101,8 @@ public class HentaiAtHomeClient implements Runnable {
         Out.startLoggers();
         Out.info("Hentai@Home " + Settings.CLIENT_VERSION + " (Build " + Settings.CLIENT_BUILD + ") starting up\n");
         Out.info("Copyright (c) 2008-2023, E-Hentai.org - all rights reserved.");
-        Out.info("This software comes with ABSOLUTELY NO WARRANTY. This is free software, and you are welcome to modify and redistribute it under the GPL v3 license.\n");
+        Out.info("This software comes with ABSOLUTELY NO WARRANTY. This is free software, and you are welcome to modify and " +
+                "redistribute it under the GPL v3 license.\n");
 
         Stats.resetStats();
         Stats.setProgramStatus("Logging in to main server...");
@@ -104,7 +113,7 @@ public class HentaiAtHomeClient implements Runnable {
         Settings.loadClientLoginFromFile();
 
         if (Settings.loginCredentialsAreSyntaxValid()) {
-            Settings.promptForIDAndKey(iqh);
+            Settings.promptForIDAndKey(inputQueryHandler);
         }
 
         // handles notifications other communication with the hentai@home server
@@ -116,7 +125,7 @@ public class HentaiAtHomeClient implements Runnable {
         try {
             // manages the files in the cache
             cacheHandler = new CacheHandler(this);
-        } catch (java.io.IOException ioe) {
+        } catch (IOException ioe) {
             setFastShutdown();
             dieWithError(ioe);
             return;
@@ -127,7 +136,7 @@ public class HentaiAtHomeClient implements Runnable {
         }
 
         // if something causes the client to terminate after this point, we want the cache to be shut down cleanly to store the state
-        java.lang.Runtime.getRuntime().addShutdownHook(new ShutdownHook());
+        Runtime.getRuntime().addShutdownHook(new ShutdownHook());
 
         Stats.setProgramStatus("Starting HTTP server...");
 
@@ -185,13 +194,14 @@ public class HentaiAtHomeClient implements Runnable {
         Out.info("H@H initialization completed successfully. Starting normal operation");
 
         while (!shutdown) {
-            // this toggle prevents the thread from calling interrupt on itself in case an error triggers a shutdown from the main thread, which could interfere with interruptable filechannel operations when saving cachehandler state
+            // this toggle prevents the thread from calling interrupt on itself in case an error triggers a shutdown from the main thread,
+            // which could interfere with interruptable filechannel operations when saving cachehandler state
             // not thread-safe; this variable should not be relied upon outside the shutdown hook
             threadInterruptable = true;
 
             try {
                 Thread.sleep(Math.max(1000, 10000 - lastThreadTime));
-            } catch (java.lang.InterruptedException e) {
+            } catch (InterruptedException e) {
                 Out.debug("Master thread sleep interrupted");
             }
 
@@ -249,11 +259,13 @@ public class HentaiAtHomeClient implements Runnable {
 
                 if (threadSkipCounter % 30 == 1) {
                     if (Math.abs(Settings.getServerTimeDelta()) > 86400) {
-                        Out.warning("Your system time seems to be off by more than 24 hours. You should shut down the client and correct your system time to ensure correct operation.");
+                        Out.warning("Your system time seems to be off by more than 24 hours. " +
+                                "You should shut down the client and correct your system time to ensure correct operation.");
                     }
 
                     if (httpServer.isCertExpired()) {
-                        dieWithError("Either the system clock is significantly wrong, or something has gone wrong with certificate renewal. Check your system clock and internet connection, then restart the client manually.");
+                        dieWithError("Either the system clock is significantly wrong, or something has gone wrong with certificate " +
+                                "renewal. Check your system clock and internet connection, then restart the client manually.");
                     }
                 }
 
@@ -276,13 +288,16 @@ public class HentaiAtHomeClient implements Runnable {
                 for (int i = 0; i < cacheHandler.getPruneAggression(); i++) {
                     if (!cacheHandler.recheckFreeDiskSpace()) {
                         // disk is full. time to shut down so we don't add to the damage.
-                        dieWithError("The free disk space has dropped below the minimum allowed threshold. H@H cannot safely continue.\nFree up space for H@H, or reduce the cache size from the H@H settings page:\nhttps://e-hentai.org/hentaiathome.php?cid=" + Settings.getClientID());
+                        dieWithError("The free disk space has dropped below the minimum allowed threshold."
+                                + " H@H cannot safely continue.\nFree up space for H@H, or reduce the cache size"
+                                + " from the H@H settings " + "page:\nhttps://e-hentai.org/hentaiathome.php?cid="
+                                + Settings.getClientID());
                     }
                 }
 
                 System.gc();
-                Out.debug("Memory total=" + runtime.totalMemory() / 1024 + "kB free=" + runtime.freeMemory() / 1024 + "kB max=" + runtime.maxMemory() / 1024 + "kB");
-
+                Out.debug("Memory total=" + runtime.totalMemory() / 1024 + "kB free=" + runtime.freeMemory() / 1024
+                        + "kB max=" + runtime.maxMemory() / 1024 + "kB");
                 ++threadSkipCounter;
             }
 
@@ -328,7 +343,7 @@ public class HentaiAtHomeClient implements Runnable {
     }
 
     public InputQueryHandler getInputQueryHandler() {
-        return iqh;
+        return inputQueryHandler;
     }
 
     public CacheHandler getCacheHandler() {
@@ -412,8 +427,7 @@ public class HentaiAtHomeClient implements Runnable {
                                                          .,    ..   \s
                                 """);
             } else {
-                String[] sd = {"I don't hate you", "Whyyyyyyyy...", "No hard feelings", "Your business is appreciated", "Good-night"};
-                Out.info(sd[(int) Math.floor(Math.random() * sd.length)]);
+                Out.info(EXIT_MESSAGES[(int) Math.floor(Math.random() * EXIT_MESSAGES.length)]);
             }
 
             if (cacheHandler != null) {
@@ -450,7 +464,8 @@ public class HentaiAtHomeClient implements Runnable {
             }
 
             if (closeWaitCycles % 5 == 0) {
-                Out.info("Waiting for " + Stats.getOpenConnections() + " request(s) to finish; will wait for another " + (maxWaitCycles - closeWaitCycles) + " seconds");
+                Out.info("Waiting for " + Stats.getOpenConnections() + " request(s) to finish; will wait for another "
+                        + (maxWaitCycles - closeWaitCycles) + " seconds");
             }
         }
     }
@@ -460,11 +475,11 @@ public class HentaiAtHomeClient implements Runnable {
     }
 
     public static void main(String[] args) {
-        InputQueryHandler iqh;
+        InputQueryHandler queryHandler;
 
         try {
-            iqh = InputQueryHandlerCLI.getIQHCLI();
-            new HentaiAtHomeClient(iqh, args);
+            queryHandler = InputQueryHandlerCLI.getIQHCLI();
+            new HentaiAtHomeClient(queryHandler, args);
         } catch (Exception e) {
             Out.error("Failed to initialize InputQueryHandler");
         }

@@ -23,6 +23,8 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 
 package hath.base;
 
+import java.io.IOException;
+import java.net.SocketException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 
@@ -31,6 +33,7 @@ public class HTTPResponseProcessorProxy extends HTTPResponseProcessor {
     private final ProxyFileDownloader proxyDownloader;
     private int readoff = 0;
     private ByteBuffer tcpBuffer;
+    private static final int THIRTY_SECONDS = 30_000;
 
     public HTTPResponseProcessorProxy(HTTPSession session, String fileid, URL[] sources) {
         this.session = session;
@@ -51,7 +54,7 @@ public class HTTPResponseProcessorProxy extends HTTPResponseProcessor {
         return proxyDownloader.getContentLength();
     }
 
-    public ByteBuffer getPreparedTCPBuffer() throws Exception {
+    public ByteBuffer getPreparedTCPBuffer() throws IOException {
         tcpBuffer.clear();
 
         int timeout = 0;
@@ -63,9 +66,9 @@ public class HTTPResponseProcessorProxy extends HTTPResponseProcessor {
             } catch (Exception ignored) {
             }
 
-            if (++timeout > 30000) {
+            if (++timeout > THIRTY_SECONDS) {
                 // we have waited about five minutes, probably won't happen
-                throw new Exception("Timeout while waiting for proxy request.");
+                throw new SocketException("Timeout while waiting for proxy request.");
             }
         }
 

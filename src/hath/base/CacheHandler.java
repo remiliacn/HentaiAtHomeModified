@@ -31,12 +31,12 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.text.DecimalFormat;
 import java.util.Enumeration;
 import java.util.Hashtable;
 
 @SuppressWarnings("unchecked")
 public class CacheHandler {
-    private static final int MEMORY_TABLE_ELEMENTS = 1048576;
     private Hashtable<String, Long> staticRangeOldest = null;
     private final HentaiAtHomeClient client;
     private final File cachedir;
@@ -47,8 +47,13 @@ public class CacheHandler {
     private int pruneAggression = 1;
     private long cacheSize = 0;
     private boolean cacheLoaded = false;
+    private static final int MEMORY_TABLE_ELEMENTS = 1048576;
+    private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("###.00");
+    private static final int SEVEN_DAYS = 604_800_000;
+    private static final long THIRTY_DAYS = 2_592_000_000L;
+    private static final long ONE_EIGHTY_DAYS = 15_552_000_000L;
 
-    public CacheHandler(HentaiAtHomeClient client) throws java.io.IOException {
+    public CacheHandler(HentaiAtHomeClient client) throws IOException {
         this.client = client;
 
         cachedir = Settings.getCacheDir();
@@ -133,11 +138,10 @@ public class CacheHandler {
         if (getCacheSizeWithOverhead() > cacheLimit) {
             Out.info("CacheHandler: We are over the cache limit, pruning until the limit is met");
             int iterations = 0;
-            java.text.DecimalFormat f = new java.text.DecimalFormat("###.00");
-
             while (getCacheSizeWithOverhead() > cacheLimit) {
                 if (iterations++ % 100 == 0) {
-                    Out.info("CacheHandler: Cache is currently at " + f.format(100.0 * getCacheSizeWithOverhead() / cacheLimit) + "%");
+                    Out.info("CacheHandler: Cache is currently at "
+                            + DECIMAL_FORMAT.format(100.0 * getCacheSizeWithOverhead() / cacheLimit) + "%");
                 }
 
                 recheckFreeDiskSpace();
@@ -171,8 +175,8 @@ public class CacheHandler {
         boolean success = false;
 
         try {
-            File persistentInfoFile = getPersistentInfoFile();
-            String[] cacheinfo = Tools.getStringFileContents(persistentInfoFile).split("\n");
+            final File persistentInfoFile = getPersistentInfoFile();
+            final String[] cacheinfo = Tools.getStringFileContents(persistentInfoFile).split("\n");
             int infoChecksum = 0;
             String agesHash = null, lruHash = null;
 
@@ -248,20 +252,20 @@ public class CacheHandler {
             String agesHash = writeCacheObject(getPersistentAgesFile(), staticRangeOldest);
             String lruHash = lruCacheTable == null ? "null" : writeCacheObject(getPersistentLRUFile(), lruCacheTable);
             Tools.putStringFileContents(getPersistentInfoFile(), "cacheCount=" + cacheCount + "\ncacheSize=" + cacheSize + "\nlruClearPointer=" + lruClearPointer + "\nagesHash=" + agesHash + "\nlruHash=" + lruHash);
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private Object readCacheObject(File file, String expectedHash) throws java.io.IOException, java.lang.ClassNotFoundException {
+    private Object readCacheObject(File file, String expectedHash) throws IOException, ClassNotFoundException {
         if (!file.exists()) {
             Out.warning("CacheHandler: Missing " + file + ", forcing rescan");
-            throw new java.io.IOException("Missing file");
+            throw new IOException("Missing file");
         }
 
         if (!Tools.getSHA1String(file).equals(expectedHash)) {
             Out.warning("CacheHandler: Incorrect file hash while reading " + file + ", forcing rescan");
-            throw new java.io.IOException("Incorrect file hash");
+            throw new IOException("Incorrect file hash");
         }
 
         ObjectInputStream objectReader = new ObjectInputStream(new FileInputStream(file));
@@ -405,7 +409,7 @@ public class CacheHandler {
             printFreq = 10000;
         }
 
-        long recentlyAccessedCutoff = System.currentTimeMillis() - 604800000;
+        long recentlyAccessedCutoff = System.currentTimeMillis() - SEVEN_DAYS;
         int foundStaticRanges = 0;
 
         // cache register pass
@@ -514,7 +518,8 @@ public class CacheHandler {
             bytesToFree = wantFree - (cacheLimit - cacheSizeWithOverhead);
         }
 
-        Out.debug("CacheHandler: Checked cache space (cacheSize=" + cacheSize + ", cacheSizeWithOverhead=" + cacheSizeWithOverhead + " cacheLimit=" + cacheLimit + ", cacheFree=" + (cacheLimit - cacheSizeWithOverhead) + ")");
+        Out.debug("CacheHandler: Checked cache space (cacheSize=" + cacheSize + ", cacheSizeWithOverhead="
+                + cacheSizeWithOverhead + " cacheLimit=" + cacheLimit + ", cacheFree=" + (cacheLimit - cacheSizeWithOverhead) + ")");
 
         if (bytesToFree > 0 && cacheCount > 0 && Settings.getStaticRangeCount() > 0) {
             String pruneStaticRange = null;
@@ -537,7 +542,8 @@ public class CacheHandler {
                 return false;
             }
 
-            File staticRangeDir = new File(cachedir, pruneStaticRange.substring(0, 2) + "/" + pruneStaticRange.substring(2, 4) + "/");
+            File staticRangeDir = new File(cachedir, pruneStaticRange.substring(0, 2)
+                    + "/" + pruneStaticRange.substring(2, 4) + "/");
             long lruLastModifiedPruneCutoff = getLruLastModifiedPruneCutoff(oldestRangeAge, nowtime);
 
             Out.debug("CacheHandler: Trying to free " + bytesToFree + " bytes, currently scanning range " + pruneStaticRange);
@@ -549,7 +555,8 @@ public class CacheHandler {
                 long oldestLastModified = nowtime;
 
                 if (files != null && files.length > 0) {
-                    Out.debug("CacheHandler: Examining " + files.length + " files with lruLastModifiedPruneCutoff=" + lruLastModifiedPruneCutoff);
+                    Out.debug("CacheHandler: Examining " + files.length + " files with lruLastModifiedPruneCutoff="
+                            + lruLastModifiedPruneCutoff);
 
                     for (File file : files) {
                         long lastModified = file.lastModified();
@@ -563,7 +570,8 @@ public class CacheHandler {
                             } else {
                                 deleteFileFromCache(toRemove);
                                 bytesToFree -= toRemove.getSize();
-                                Out.debug("CacheHandler: Pruned file had lastModified=" + lastModified + " size=" + toRemove.getSize() + " bytesToFree=" + bytesToFree + " cacheCount=" + cacheCount);
+                                Out.debug("CacheHandler: Pruned file had lastModified=" + lastModified + " size="
+                                        + toRemove.getSize() + " bytesToFree=" + bytesToFree + " cacheCount=" + cacheCount);
                             }
                         } else {
                             oldestLastModified = Math.min(oldestLastModified, lastModified);
@@ -605,13 +613,13 @@ public class CacheHandler {
     private long getLruLastModifiedPruneCutoff(long oldestRangeAge, long nowtime) {
         long lruLastModifiedPruneCutoff = oldestRangeAge;
 
-        if (oldestRangeAge < nowtime - 15552000000L) {
+        if (oldestRangeAge < nowtime - ONE_EIGHTY_DAYS) {
             // oldest file is more than six months old, prune files newer than up to 30 days after this file
-            lruLastModifiedPruneCutoff += 2592000000L;
+            lruLastModifiedPruneCutoff += THIRTY_DAYS;
         } else if (oldestRangeAge < nowtime - 7776000000L) {
             // oldest file is between three and six months old, prune files newer than up to 7 days after this file
-            lruLastModifiedPruneCutoff += 604800000L;
-        } else if (oldestRangeAge < nowtime - 2592000000L) {
+            lruLastModifiedPruneCutoff += SEVEN_DAYS;
+        } else if (oldestRangeAge < nowtime - THIRTY_DAYS) {
             // oldest file is between one and three months old, prune files newer than up to 3 days after this file
             lruLastModifiedPruneCutoff += 259200000L;
         } else {
@@ -790,7 +798,7 @@ public class CacheHandler {
             File file = hvFile.getLocalFileRef();
             long nowtime = System.currentTimeMillis();
 
-            if (file.lastModified() < nowtime - 604800000) {
+            if (file.lastModified() < nowtime - SEVEN_DAYS) {
                 file.setLastModified(nowtime);
             }
         }

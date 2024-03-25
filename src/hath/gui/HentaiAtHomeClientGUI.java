@@ -180,7 +180,7 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
 
         try {
             Thread.sleep(startVisible ? 2000 : 60000);
-        } catch (Exception ignored) {
+        } catch (InterruptedException ignored) {
         }
 
         Settings.setActiveGUI(this);
@@ -193,7 +193,7 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
         while (true) {
             try {
                 Thread.sleep(500);
-            } catch (Exception ignored) {
+            } catch (InterruptedException ignored) {
             }
 
             if (!Stats.isClientSuspended() && suspend_resume.isEnabled()) {
@@ -201,7 +201,7 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
                 setSuspendEnabled(true);
             }
 
-            if (!refresh_settings.isEnabled() && lastSettingRefresh < System.currentTimeMillis() - 60000) {
+            if (!refresh_settings.isEnabled() && lastSettingRefresh < System.currentTimeMillis() - 60_000) {
                 refresh_settings.setEnabled(true);
             }
 
@@ -215,7 +215,9 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
     }
 
     public void notifyError(String reason) {
-        JOptionPane.showMessageDialog(this, reason + "\n\nFor more information, look in the log files found in the data directory.", "Hentai@Home has encountered an error", JOptionPane.ERROR_MESSAGE);
+        JOptionPane.showMessageDialog(this, reason
+                        + "\n\nFor more information, look in the log files found in the data directory.",
+                "Hentai@Home has encountered an error", JOptionPane.ERROR_MESSAGE);
     }
 
     // ActionListener for the JMenuBar
@@ -257,7 +259,9 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
 
         if (trayFirstMinimize) {
             trayFirstMinimize = false;
-            trayIcon.displayMessage("Hentai@Home is still running", "Click here when you wish to show the Hentai@Home Client", TrayIcon.MessageType.INFO);
+            trayIcon.displayMessage("Hentai@Home is still running",
+                    "Click here when you wish to show the Hentai@Home Client",
+                    TrayIcon.MessageType.INFO);
         }
     }
 

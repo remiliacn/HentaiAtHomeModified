@@ -31,6 +31,7 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManagerFactory;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URL;
@@ -50,11 +51,17 @@ public class HTTPServer implements Runnable {
     private HTTPBandwidthMonitor bandwidthMonitor = null;
     private SSLServerSocket listener = null;
     private final List<HTTPSession> sessions;
-    private int sessionCount = 0, currentConnId = 0;
-    private boolean allowNormalConnections = false, isRestarting = false, isTerminated = false;
+    private int sessionCount = 0;
+    private int currentConnId = 0;
+    private boolean allowNormalConnections = false;
+    private boolean isRestarting = false;
+    private boolean isTerminated = false;
     private final Hashtable<String, FloodControlEntry> floodControlTable;
     private final Pattern localNetworkPattern;
     private Date certExpiry;
+    private static final long ONE_DAY = 86_400_000L;
+    private static final int TEN_SECONDS = 10_000;
+
 
     public HTTPServer(HentaiAtHomeClient client) {
         this.client = client;
@@ -78,7 +85,7 @@ public class HTTPServer implements Runnable {
             Out.info("Requesting certificate from server...");
             File certFile = new File(Settings.getDataDir(), "hathcert.p12");
             URL certUrl = ServerHandler.getServerConnectionURL(ServerHandler.ACT_GET_CERTIFICATE);
-            FileDownloader certdl = new FileDownloader(certUrl, 10000, certFile.toPath());
+            FileDownloader certdl = new FileDownloader(certUrl, TEN_SECONDS, certFile.toPath());
             certdl.downloadFile();
 
             if (!certFile.exists()) {
@@ -94,7 +101,6 @@ public class HTTPServer implements Runnable {
             certExpiry = cert.getNotAfter();
 
             Out.debug("Initialized KeyStore with " + cert.getSubjectX500Principal().getName());
-            //Out.debug("Initialized KeyStore with cert=" + cert.toString());
 
             if (isCertExpired()) {
                 Out.error("The retrieved certificate is expired, or the system time is off by more than a day. Correct the system time and try again.");
@@ -117,7 +123,7 @@ public class HTTPServer implements Runnable {
             Out.info("Starting up the internal HTTP Server...");
             SSLServerSocketFactory ssf = sslContext.getServerSocketFactory();
             listener = (SSLServerSocket) ssf.createServerSocket(port);
-            listener.setEnabledProtocols(new String[]{"TLSv1.2", "TLSv1.1", "TLSv1"});
+            listener.setEnabledProtocols(new String[]{"TLSv1.3", "TLSv1.2", "TLSv1"});
 
             Out.debug("Initialized SSLContext with cert " + certFile + " and protocol " + sslContext.getProtocol());
             Out.debug("Supported ciphers: " + Arrays.toString(sslContext.getSupportedSSLParameters().getCipherSuites()));
@@ -140,8 +146,10 @@ public class HTTPServer implements Runnable {
             Out.info("In order to fix this, either shut down whatever else is using the port, or assign a different port to H@H.");
 
             if (port < 1024) {
-                Out.info("It could also be caused by trying to use port " + port + " on a system that disallows non-root users from binding to low ports.");
-                Out.info("For information on how to work around this, read this post: https://forums.e-hentai.org/index.php?showtopic=232693");
+                Out.info("It could also be caused by trying to use port " + port
+                        + " on a system that disallows non-root users from binding to low ports.");
+                Out.info("For information on how to work around this, " +
+                        "read this post: https://forums.e-hentai.org/index.php?showtopic=232693");
             }
 
             Out.info("************************************************************************************************************************************");
@@ -157,7 +165,7 @@ public class HTTPServer implements Runnable {
         Out.debug("Current system time is " + nowtime + " (" + nowtime.getTime() + ")");
         Out.debug("Certificate expires on " + certExpiry + " (" + certExpiry.getTime() + ")");
 
-        return certExpiry.getTime() < nowtime.getTime() + 86400000L;
+        return certExpiry.getTime() < nowtime.getTime() + ONE_DAY;
     }
 
     public void stopConnectionListener(boolean restart) {
@@ -166,7 +174,7 @@ public class HTTPServer implements Runnable {
         if (listener != null) {
             try {
                 listener.close();    // will cause listener.accept() to throw an exception, terminating the accept thread
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
 
             listener = null;
@@ -186,9 +194,7 @@ public class HTTPServer implements Runnable {
                 }
             }
 
-            for (String key : toPrune) {
-                floodControlTable.remove(key);
-            }
+            toPrune.forEach(floodControlTable::remove);
         }
 
         toPrune.clear();
@@ -207,9 +213,7 @@ public class HTTPServer implements Runnable {
                 }
             }
 
-            for (HTTPSession session : remove) {
-                removeHTTPSession(session);
-            }
+            remove.forEach(this::removeHTTPSession);
         }
 
         if (!remove.isEmpty()) {
@@ -229,7 +233,9 @@ public class HTTPServer implements Runnable {
                 boolean forceClose = false;
                 InetAddress addr = socket.getInetAddress();
                 String hostAddress = addr.getHostAddress().toLowerCase();
-                boolean localNetworkAccess = Settings.getClientHost().replace("::ffff:", "").equals(hostAddress) || localNetworkPattern.matcher(hostAddress).matches();
+                boolean localNetworkAccess = Settings.getClientHost()
+                        .replace("::ffff:", "")
+                        .equals(hostAddress) || localNetworkPattern.matcher(hostAddress).matches();
                 boolean apiServerAccess = Settings.isValidRPCServer(addr);
 
                 if (!apiServerAccess && !allowNormalConnections) {
@@ -272,7 +278,7 @@ public class HTTPServer implements Runnable {
                 if (forceClose) {
                     try {
                         socket.close();
-                    } catch (Exception ignored) {
+                    } catch (IOException ignored) {
                     }
                 } else {
                     // all is well. keep truckin'
@@ -287,7 +293,7 @@ public class HTTPServer implements Runnable {
                     hs.handleSession();
                 }
             }
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             if (!isRestarting && !client.isShuttingDown()) {
                 Out.error("ServerSocket terminated unexpectedly!");
                 HentaiAtHomeClient.dieWithError(e);

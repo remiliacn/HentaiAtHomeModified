@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 public class GalleryDownloader implements Runnable {
+    public static final int THIRTY_SECONDS = 30000;
     protected HentaiAtHomeClient client;
     private final FileValidator validator;
     protected HTTPBandwidthMonitor downloadLimiter;
@@ -156,7 +157,7 @@ public class GalleryDownloader implements Runnable {
         }
 
         // this does two things: marks the previous gallery as downloaded and removes it from the queue, and fetches metadata of the next gallery in the queue
-        FileDownloader metaDownloader = new FileDownloader(metaurl, 30000);
+        FileDownloader metaDownloader = new FileDownloader(metaurl, THIRTY_SECONDS);
         String galleryMeta = metaDownloader.getResponseAsString("UTF8");
 
         if (galleryMeta == null) {
@@ -360,12 +361,14 @@ public class GalleryDownloader implements Runnable {
                 }
             }
 
-            // if this turns out to be a file that can be handled by this client, the returned link will be to localhost, which will trigger a static range fetch using the standard mechanism
-            // we don't have enough information at this point to initiate a ProxyFileDownload directly, so while the extra roundtrip might seem wasteful, it is necessary (and usually fairly rare)
+            // if this turns out to be a file that can be handled by this client, the returned link will be to localhost,
+            // which will trigger a static range fetch using the standard mechanism
+            // we don't have enough information at this point to initiate a ProxyFileDownload directly,
+            // so while the extra roundtrip might seem wasteful, it is necessary (and usually fairly rare)
             URL source = client.getServerHandler().getDownloaderFetchURL(gid, page, fileindex, xres, ++fileretry > 1);
 
             if (source != null) {
-                FileDownloader dler = new FileDownloader(source, 10000, tofile.toPath());
+                FileDownloader dler = new FileDownloader(source, 10_000, tofile.toPath());
                 dler.setDownloadLimiter(downloadLimiter);
                 fileComplete = dler.downloadFile();
 

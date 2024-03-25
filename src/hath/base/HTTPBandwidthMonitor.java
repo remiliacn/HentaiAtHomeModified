@@ -24,12 +24,13 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 package hath.base;
 
 public class HTTPBandwidthMonitor {
-    private static final int TIME_RESOLUTION = 50;
-    private static final int WINDOW_LENGTH = 5;
     private final int millisPerTick;
     private final int bytesPerTick;
     private final int[] tickBytes;
     private final int[] tickSeconds;
+    private static final int TIME_RESOLUTION = 50;
+    private static final int WINDOW_LENGTH = 5;
+    private static final int ONE_SECOND = 1000;
 
     public HTTPBandwidthMonitor() {
         bytesPerTick = (int) Math.ceil((double) Settings.getThrottleBytesPerSec() / TIME_RESOLUTION);
@@ -41,8 +42,8 @@ public class HTTPBandwidthMonitor {
     public synchronized void waitForQuota(int bytecount) {
         do {
             long now = System.currentTimeMillis();
-            long epochSeconds = now / 1000;
-            int currentTick = (int) ((now - epochSeconds * 1000) / millisPerTick);
+            long epochSeconds = now / ONE_SECOND;
+            int currentTick = (int) ((now - epochSeconds * ONE_SECOND) / millisPerTick);
             int currentSecond = (int) epochSeconds;
             int bytesThisTick = 0, bytesLastWindow = 0, bytesLastSecond = 0;
             int tickCounter = currentTick - TIME_RESOLUTION;
@@ -66,7 +67,8 @@ public class HTTPBandwidthMonitor {
                 }
             }
 
-            if (bytesThisTick > bytesPerTick * 1.1 || bytesLastWindow > bytesPerTick * WINDOW_LENGTH * 1.05 || bytesLastSecond > bytesPerTick * TIME_RESOLUTION) {
+            if (bytesThisTick > bytesPerTick * 1.1 || bytesLastWindow > bytesPerTick * WINDOW_LENGTH * 1.05
+                    || bytesLastSecond > bytesPerTick * TIME_RESOLUTION) {
                 //Out.debug("sleeping with currentTick=" + currentTick + " second=" + currentSecond + " bytesPerTick=" + bytesPerTick + " bytesThisTick=" + bytesThisTick + " bytesLastWindow=" + bytesLastWindow + " bytesLastSecond=" + bytesLastSecond);
 
                 try {

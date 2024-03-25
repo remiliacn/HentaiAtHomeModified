@@ -42,28 +42,29 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class HTTPSession implements Runnable {
-
-    public static final String CRLF = "\r\n";
-
-    private static final DecimalFormat DECIMAL_FORMATTER = new DecimalFormat("#.##");
-
-    private static final Pattern getheadPattern =
-            Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-
-    private static final DateTimeFormatter DATE_TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss")
-                    .localizedBy(Locale.US)
-                    .withZone(ZoneId.of("UTC"));
-
     private final SSLSocket socket;
     private final HTTPServer httpServer;
     private final int connId;
     private final boolean localNetworkAccess;
     private final long sessionStartTime;
     private long lastPacketSend;
-    private HTTPResponse hr;
+    private HTTPResponse httpResponse;
 
-    public HTTPSession(SSLSocket socket, int connId, boolean localNetworkAccess, HTTPServer httpServer) {
+    private static final String CRLF = "\r\n";
+    private static final DecimalFormat DECIMAL_FORMATTER = new DecimalFormat("#.##");
+    private static final Pattern getheadPattern =
+            Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss")
+                    .localizedBy(Locale.US)
+                    .withZone(ZoneId.of("UTC"));
+    private static final int SOCKET_TIMEOUT_MILLISECONDS = 20_000;
+    private static final int ONE_SECOND = 1000;
+    private static final int THIRTY_SECONDS = 30_000;
+    private static final int THREE_MINUTES = 180_000;
+    private static final int THIRTY_MINUTES = 1_800_000;
+
+    public HTTPSession(final SSLSocket socket, final int connId, final boolean localNetworkAccess, final HTTPServer httpServer) {
         sessionStartTime = System.currentTimeMillis();
         this.socket = socket;
         this.connId = connId;
@@ -77,36 +78,34 @@ public class HTTPSession implements Runnable {
     }
 
     private void connectionFinished() {
-        if (hr != null) {
-            hr.requestCompleted();
+        if (httpResponse != null) {
+            httpResponse.requestCompleted();
         }
 
         httpServer.removeHTTPSession(this);
     }
 
     public void run() {
-        // why are we back to input/output streams? because java has no SSLSocketChannel, using them with SSLEngine is stupidly complex, and all the middleware libraries for SSL over channels are either broken, outdated, or require a major code rewrite
-        // may switch back to channels in the future if a decent library materializes, or I can be arsed to learn SSLEngine and implementing it does not require a major rewrite
+        // why are we back to input/output streams? because java has no SSLSocketChannel, using them with SSLEngine is stupidly complex,
+        // and all the middleware libraries for SSL over channels are either broken, outdated, or require a major code rewrite
+        // may switch back to channels in the future if a decent library materializes, or I can be arsed to learn SSLEngine and
+        // implementing it does not require a major rewrite
         BufferedReader reader = null;
         DataOutputStream writer = null;
-        HTTPResponseProcessor hpc = null;
+        HTTPResponseProcessor httpResponseProcessor = null;
         String info = this + "\t";
 
         try {
-            socket.setSoTimeout(10000);
+            socket.setSoTimeout(SOCKET_TIMEOUT_MILLISECONDS);
 
             reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             writer = new DataOutputStream(socket.getOutputStream());
-
             // read the header and parse the request - this will also update the response code and initialize the proper response processor
             String request = null;
-
             // ignore every single line except for the request one. we SSL now, so if there is no end-of-line, just wait for the timeout
             do {
                 String read = reader.readLine();
-
                 if (read != null) {
-
                     if (getheadPattern.matcher(read).matches()) {
                         request = read.substring(0, Math.min(1000, read.length()));
                     } else if (read.isEmpty()) {
@@ -117,25 +116,24 @@ public class HTTPSession implements Runnable {
                 }
             } while (true);
 
-            hr = new HTTPResponse(this);
-            hr.parseRequest(request);
+            httpResponse = new HTTPResponse(this);
+            httpResponse.parseRequest(request);
 
             // get the status code and response processor - in case of an error, this will be a text type with the error message
-            hpc = hr.getHTTPResponseProcessor();
-            int statusCode = hr.getResponseStatusCode();
-            int contentLength = hpc.getContentLength();
+            httpResponseProcessor = httpResponse.getHTTPResponseProcessor();
+            int statusCode = httpResponse.getResponseStatusCode();
+            int contentLength = httpResponseProcessor.getContentLength();
 
             // build the header
             StringBuilder header = new StringBuilder(300);
             header.append(getHTTPStatusHeader(statusCode));
-            header.append(hpc.getHeader());
-            header.append("Date: ")
-                    .append(DATE_TIME_FORMATTER.format((new Date()).toInstant()))
+            header.append(httpResponseProcessor.getHeader());
+            header.append("Date: ").append(DATE_TIME_FORMATTER.format((new Date()).toInstant()))
                     .append(" GMT")
                     .append(CRLF);
             header.append("Server: Genetic Lifeform and Distributed Open Server " + Settings.CLIENT_VERSION + CRLF);
             header.append("Connection: close" + CRLF);
-            header.append("Content-Type: ").append(hpc.getContentType()).append(CRLF);
+            header.append("Content-Type: ").append(httpResponseProcessor.getContentType()).append(CRLF);
 
             if (contentLength > 0) {
                 header.append("Cache-Control: public, max-age=31536000" + CRLF);
@@ -146,11 +144,11 @@ public class HTTPSession implements Runnable {
 
             // write the header to the socket
             byte[] headerBytes = header.toString().getBytes(StandardCharsets.ISO_8859_1);
-
             if (request != null && contentLength > 0) {
                 try {
                     // buffer size might be limited by OS. for linux, check net.core.wmem_max
-                    int bufferSize = (int) Math.min(contentLength + headerBytes.length + 32, Math.min(Settings.isUseLessMemory() ? 131072 : 524288, Math.round(0.2 * Settings.getThrottleBytesPerSec())));
+                    int bufferSize = (int) Math.min(contentLength + headerBytes.length + 32,
+                            Math.min(Settings.isUseLessMemory() ? 131072 : 524288, Math.round(0.2 * Settings.getThrottleBytesPerSec())));
                     socket.setSendBufferSize(bufferSize);
                 } catch (Exception e) {
                     Out.info(e.getMessage());
@@ -158,49 +156,44 @@ public class HTTPSession implements Runnable {
             }
 
             HTTPBandwidthMonitor bwm = httpServer.getBandwidthMonitor();
-
             if (bwm != null && !localNetworkAccess) {
                 bwm.waitForQuota(headerBytes.length);
             }
-
             writer.write(headerBytes, 0, headerBytes.length);
             if (!localNetworkAccess) {
                 Stats.bytesSent(headerBytes.length);
             }
 
-            if (hr.isRequestHeadOnly()) {
+            if (httpResponse.isRequestHeadOnly()) {
                 // if this is a HEAD request, we are done
                 writer.flush();
-
                 info += "Code=" + statusCode + " ";
                 Out.info(info + (request == null ? "Invalid Request" : request));
             } else {
                 // if this is a GET request, process the body if we have one
                 info += "Code=" + statusCode + " Size=" + humanReadableByteCountBin(contentLength) + "\t";
-
                 if (request != null) {
                     // skip the startup message for error requests
                     Out.info(info + request);
                 }
 
                 long startTime = System.currentTimeMillis();
-
                 if (contentLength > 0) {
                     int writtenBytes = 0;
                     int lastWriteLen;
 
-                    // bytebuffers returned by getPreparedTCPBuffer should never have a remaining() larger than Settings.TCP_PACKET_SIZE. if that happens due to some bug, we will hit an IndexOutOfBounds exception during the get below
+                    // bytebuffers returned by getPreparedTCPBuffer should never have a remaining() larger than Settings.TCP_PACKET_SIZE.
+                    // if that happens due to some bug, we will hit an IndexOutOfBounds exception during the get below
                     byte[] buffer = new byte[Settings.TCP_PACKET_SIZE];
 
                     while (writtenBytes < contentLength) {
                         lastPacketSend = System.currentTimeMillis();
-                        ByteBuffer tcpBuffer = hpc.getPreparedTCPBuffer();
+                        ByteBuffer tcpBuffer = httpResponseProcessor.getPreparedTCPBuffer();
                         lastWriteLen = tcpBuffer.remaining();
 
                         if (bwm != null && !localNetworkAccess) {
                             bwm.waitForQuota(lastWriteLen);
                         }
-
                         tcpBuffer.get(buffer, 0, lastWriteLen);
                         writer.write(buffer, 0, lastWriteLen);
                         writtenBytes += lastWriteLen;
@@ -212,7 +205,8 @@ public class HTTPSession implements Runnable {
 
                 writer.flush();
 
-                // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers, so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
+                // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers,
+                // so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
                 long sendTime = System.currentTimeMillis() - startTime;
                 Out.info(info + "Finished processing request in "
                         + DECIMAL_FORMATTER.format(sendTime / 1000.0) + " seconds"
@@ -221,17 +215,16 @@ public class HTTPSession implements Runnable {
                         + " KB/s)" : ""));
             }
         } catch (SocketException e) {
-            Out.info(info + "The connection was interrupted or closed by the remote host.");
-            Out.info(e.getMessage());
+            Out.info(info + "Socket exception: " + e.getMessage());
+            Out.debug(e.getMessage());
         } catch (IOException e) {
             Out.debug(info + "IO Exception.");
             Out.debug(e.getMessage());
         } catch (Exception e) {
-            Out.info(info + "???");
-            Out.info(e.getMessage());
+            Out.info(info + " WTF??? " + e.getMessage());
         } finally {
-            if (hpc != null) {
-                hpc.cleanup();
+            if (httpResponseProcessor != null) {
+                httpResponseProcessor.cleanup();
             }
 
             try {
@@ -239,11 +232,11 @@ public class HTTPSession implements Runnable {
                     reader.close();
                 }
                 writer.close();
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
             try {
                 socket.close();
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
         }
 
@@ -268,16 +261,15 @@ public class HTTPSession implements Runnable {
     public boolean doTimeoutCheck() {
         long nowtime = System.currentTimeMillis();
 
-        if (lastPacketSend < nowtime - 1000 && socket.isClosed()) {
+        if (lastPacketSend < nowtime - ONE_SECOND && socket.isClosed()) {
             // the connecion was already closed and should be removed by the HTTPServer instance.
             // the lastPacketSend check was added to prevent spurious "Killing stuck session" errors
             return true;
-        } else {
-            int startTimeout = hr != null ? (hr.isServercmd() ? 1800000 : 180000) : 30000;
-
-            return (sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout)
-                    || (lastPacketSend > 0 && lastPacketSend < nowtime - 30000);
         }
+
+        int startTimeout = httpResponse != null ? (httpResponse.isServercmd() ? THIRTY_MINUTES : THREE_MINUTES) : THIRTY_SECONDS;
+        return (sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout)
+                || (lastPacketSend > 0 && lastPacketSend < nowtime - THIRTY_SECONDS);
     }
 
     public void forceCloseSocket() {
@@ -293,7 +285,6 @@ public class HTTPSession implements Runnable {
     }
 
     // accessors
-
     public HTTPServer getHTTPServer() {
         return httpServer;
     }

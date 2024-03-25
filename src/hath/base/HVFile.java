@@ -24,14 +24,20 @@ along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
 package hath.base;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
+import java.util.regex.Pattern;
 
 public class HVFile {
+    public static final Pattern VALID_REGEX_1
+            = Pattern.compile("^[a-f0-9]{40}-[0-9]{1,10}-[0-9]{1,5}-[0-9]{1,5}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$");
+    public static final Pattern VALID_REGEX_2 = Pattern.compile("^[a-f0-9]{40}-[0-9]{1,10}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$");
     private final String hash;
     private final int size;
     private final int xres;
     private final int yres;
     private final String type;
+    public static final String DELIMITER = "-";
 
     private HVFile(String hash, int size, int xres, int yres, String type) {
         this.hash = hash;
@@ -50,46 +56,25 @@ public class HVFile {
     }
 
     public String getMimeType() {
-        if (type.equals("jpg")) {
-            return "image/jpeg";
-        }
-
-        if (type.equals("png")) {
-            return "image/png";
-        }
-
-        if (type.equals("gif")) {
-            return "image/gif";
-        }
-
-        if (type.equals("mp4")) {
-            return "video/mp4";
-        }
-
-        if (type.equals("wbm")) {
-            return "video/webm";
-        }
-
-        if (type.equals("wbp")) {
-            return "image/webp";
-        }
-
-        if (type.equals("avf")) {
-            return "image/avif";
-        }
-
-        if (type.equals("jxl")) {
-            return "image/jxl";
-        }
-
-        return "application/octet-stream";
+        return switch (type) {
+            case "jpg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "gif" -> "image/gif";
+            case "mp4" -> "video/mp4";
+            case "wbm" -> "video/webm";
+            case "wbp" -> "image/webp";
+            case "avf" -> "image/avif";
+            case "jxl" -> "image/jxl";
+            default -> "application/octet-stream";
+        };
     }
 
     public String getFileid() {
         if (xres > 0) {
-            return hash + "-" + size + "-" + xres + "-" + yres + "-" + type;
+            return String.join(DELIMITER, hash, Integer.toString(size),
+                    Integer.toString(xres), Integer.toString(yres), type);
         } else {
-            return hash + "-" + size + "-" + type;
+            return String.join(DELIMITER, hash, Integer.toString(size), type);
         }
     }
 
@@ -106,7 +91,7 @@ public class HVFile {
     }
 
     public static boolean isValidHVFileid(String fileid) {
-        return java.util.regex.Pattern.matches("^[a-f0-9]{40}-[0-9]{1,10}-[0-9]{1,5}-[0-9]{1,5}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$", fileid) || java.util.regex.Pattern.matches("^[a-f0-9]{40}-[0-9]{1,10}-(jpg|png|gif|mp4|wbm|wbp|avf|jxl)$", fileid);
+        return VALID_REGEX_1.matcher(fileid).matches() || VALID_REGEX_2.matcher(fileid).matches();
     }
 
     public static HVFile getHVFileFromFile(File file) {
@@ -135,7 +120,7 @@ public class HVFile {
                 }
 
                 return hvFile;
-            } catch (java.io.IOException e) {
+            } catch (IOException e) {
                 e.printStackTrace();
                 Out.warning("Warning: Encountered IO error computing the hash value of " + file);
             }

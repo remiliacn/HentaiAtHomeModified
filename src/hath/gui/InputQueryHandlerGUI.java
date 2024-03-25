@@ -38,7 +38,8 @@ public class InputQueryHandlerGUI implements InputQueryHandler {
         String s;
 
         do {
-            s = JOptionPane.showInputDialog(frame, querytext, "Hentai@Home needs some input...", JOptionPane.PLAIN_MESSAGE);
+            s = JOptionPane.showInputDialog(frame, querytext,
+                    "Hentai@Home needs some input...", JOptionPane.PLAIN_MESSAGE);
 
             if (s == null) {
                 System.out.print("Interrupted");

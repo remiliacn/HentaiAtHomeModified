@@ -33,12 +33,16 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.util.Arrays;
 import java.util.Hashtable;
 
 public class Tools {
+
+    public static final String SHA_1 = "SHA-1";
+
     public static File checkAndCreateDir(File dir) throws java.io.IOException {
         if (dir.isFile()) {
             dir.delete();
@@ -84,7 +88,7 @@ public class Tools {
         return files;
     }
 
-    public static Hashtable<String, String> parseAdditional(String additional) {
+    public static Hashtable<String, String> parseAdditional(final String additional) {
         Hashtable<String, String> addTable = new Hashtable<>();
 
         if (additional != null) {
@@ -113,8 +117,8 @@ public class Tools {
         String hash = null;
 
         try {
-            hash = binaryToHex(MessageDigest.getInstance("SHA-1").digest(stringToHash.getBytes()));
-        } catch (java.security.NoSuchAlgorithmException e) {
+            hash = binaryToHex(MessageDigest.getInstance(SHA_1).digest(stringToHash.getBytes()));
+        } catch (NoSuchAlgorithmException e) {
             HentaiAtHomeClient.dieWithError(e);
         }
 
@@ -182,5 +186,9 @@ public class Tools {
         }
         value *= Long.signum(bytes);
         return String.format("%.2f %cB", value / 1024.0, ci.current());
+    }
+
+    public static boolean isDigit(String string) {
+        return string.chars().allMatch(Character::isDigit);
     }
 }

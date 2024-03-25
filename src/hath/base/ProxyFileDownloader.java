@@ -26,6 +26,8 @@ package hath.base;
 import java.io.File;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.ByteBuffer;
@@ -172,15 +174,15 @@ public class ProxyFileDownloader implements Runnable {
                             } else {
                                 // readcount == -1 => EOF
                                 Out.warning("\nServer sent premature EOF, aborting.. (" + writeoff + " of " + contentLength + " bytes received)");
-                                throw new java.net.SocketException("Unexpected end of file from server");
+                                throw new SocketException("Unexpected end of file from server");
                             }
                         } else {
                             if (System.currentTimeMillis() - downloadStart > 300000) {
                                 Out.warning("\nDownload time limit has expired, aborting...");
-                                throw new java.net.SocketTimeoutException("Download timed out");
+                                throw new SocketTimeoutException("Download timed out");
                             } else if (time > 30000) {
                                 Out.warning("\nTimeout detected waiting for byte " + writeoff + ", aborting..");
-                                throw new java.net.SocketTimeoutException("Read timed out");
+                                throw new SocketTimeoutException("Read timed out");
                             }
 
                             time += 5;

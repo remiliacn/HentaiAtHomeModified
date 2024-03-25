@@ -25,12 +25,14 @@ package hath.base;
 
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.SocketException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Objects;
 
 public class FileDownloader implements Runnable {
     private int retries = 3;
@@ -46,7 +48,12 @@ public class FileDownloader implements Runnable {
     private boolean discardData = false;
     private boolean successful = false;
 
-    public FileDownloader(URL source, int timeout) {
+    private static final int ONE_SECOND = 1_000;
+    private static final int TEN_MB = 10_485_760;
+    private static final String SERVER_RETURNED_404_NOT_FOUND = "Server returned: 404 Not Found";
+    private static final String REPLY_EXCEEDS_EXPECTED_LENGTH = "Reply exceeds expected length";
+
+    public FileDownloader(final URL source, final int timeout) {
         // everything will be written to a ByteBuffer
         this.source = source;
         this.timeout = timeout;
@@ -66,13 +73,13 @@ public class FileDownloader implements Runnable {
         this.outputPath = outputPath;
     }
 
-    public void setDownloadLimiter(HTTPBandwidthMonitor limiter) {
+    public void setDownloadLimiter(final HTTPBandwidthMonitor limiter) {
         downloadLimiter = limiter;
     }
 
     public boolean downloadFile() {
         // this will block while the file is downloaded
-        if (myThread == null) {
+        if (Objects.isNull(myThread)) {
             // if startAsyncDownload has not been called, we invoke run() directly and skip threading
             run();
         } else {
@@ -84,7 +91,7 @@ public class FileDownloader implements Runnable {
 
     public void startAsyncDownload() {
         // start a new thread to handle the download. this will return immediately
-        if (myThread == null) {
+        if (Objects.isNull(myThread)) {
             myThread = new Thread(this);
             myThread.start();
         }
@@ -93,23 +100,25 @@ public class FileDownloader implements Runnable {
     public boolean waitAsyncDownload() {
         // make sure the download thread has actually finished starting up
         try {
-            int timeout = 1000;
+            int timeout = ONE_SECOND;
 
             while (!started && (--timeout > 0)) {
-                Thread.sleep(1000);
+                Thread.sleep(ONE_SECOND);
             }
-        } catch (Exception ignored) {
+        } catch (InterruptedException ignored) {
         }
 
         // synchronize on the download lock to wait for the download attempts to complete before returning
         synchronized (downloadLock) {
-            Out.debug("Finished async wait for source=" + source + " with timeDownloadStart=" + timeDownloadStart + " timeFirstByte=" + timeFirstByte + " timeDownloadFinish=" + timeDownloadFinish + " successful=" + successful);
+            Out.debug("Finished async wait for source=" + source + " with timeDownloadStart="
+                    + timeDownloadStart + " timeFirstByte=" + timeFirstByte + " timeDownloadFinish=" + timeDownloadFinish
+                    + " successful=" + successful);
         }
 
         return successful;
     }
 
-    public String getResponseAsString(String charset) {
+    public String getResponseAsString(final String charset) {
         if (downloadFile()) {
             if (byteBuffer != null) {
                 byteBuffer.flip();
@@ -161,14 +170,14 @@ public class FileDownloader implements Runnable {
                         // since we control all systems in this case, we'll demand that clients and servers always send the Content-Length
                         Out.warning("Request host did not send Content-Length, aborting transfer." + " (" + connection + ")");
                         Out.warning("Note: A common reason for this is running firewalls with outgoing restrictions or programs like PeerGuardian/PeerBlock. Verify that the remote host is not blocked.");
-                        throw new java.net.SocketException("Invalid or missing Content-Length");
-                    } else if (contentLength > 10485760 && !discardData && outputPath == null) {
+                        throw new SocketException("Invalid or missing Content-Length");
+                    } else if (contentLength > TEN_MB && !discardData && outputPath == null) {
                         // if we're writing to a ByteBuffer, hard limit responses to 10MB
                         Out.warning("Reported contentLength " + contentLength + " exceeds max allowed size for memory buffer download");
-                        throw new java.net.SocketException("Reply exceeds expected length");
+                        throw new SocketException(REPLY_EXCEEDS_EXPECTED_LENGTH);
                     } else if (contentLength > Settings.getMaxAllowedFileSize()) {
                         Out.warning("Reported contentLength " + contentLength + " exceeds currently max allowed filesize " + Settings.getMaxAllowedFileSize());
-                        throw new java.net.SocketException("Reply exceeds expected length");
+                        throw new SocketException(REPLY_EXCEEDS_EXPECTED_LENGTH);
                     }
 
                     is = connection.getInputStream();
@@ -203,7 +212,7 @@ public class FileDownloader implements Runnable {
                     Out.debug("Reading " + contentLength + " bytes from " + source);
                     timeDownloadStart = System.currentTimeMillis();
 
-                    long writeoff = 0;    // counts the number of bytes read
+                    long writeoff = 0L;    // counts the number of bytes read
                     int readbytes;    // the number of bytes in the last read
 
                     // HttpsURLConnection is retarded and breaks (does not download more data) unless we do a blocking read, so now we use a normal byte array as a buffer like some primitive savage
@@ -241,14 +250,16 @@ public class FileDownloader implements Runnable {
                     successful = writeoff == contentLength;
                     timeDownloadFinish = System.currentTimeMillis();
                     long dltime = getDownloadTimeMillis();
-                    Out.debug("Finished download for " + source + " in " + dltime + " ms" + (dltime > 0 ? ", speed=" + (writeoff / dltime) + "KB/s" : "") + ", writeoff=" + writeoff + ", successful=" + (successful ? "yes" : "no"));
+                    Out.debug("Finished download for " + source + " in " + dltime
+                            + " ms" + (dltime > 0 ? ", speed=" + (writeoff / dltime) + "KB/s" : "")
+                            + ", writeoff=" + writeoff + ", successful=" + (successful ? "yes" : "no"));
                     Stats.bytesRcvd(contentLength);
                 } catch (Exception e) {
                     if (e instanceof java.io.FileNotFoundException) {
-                        Out.warning("Server returned: 404 Not Found");
+                        Out.warning(SERVER_RETURNED_404_NOT_FOUND);
                         break;
                     } else if (e.getCause() instanceof java.io.FileNotFoundException) {
-                        Out.warning("Server returned: 404 Not Found");
+                        Out.warning(SERVER_RETURNED_404_NOT_FOUND);
                         break;
                     }
 

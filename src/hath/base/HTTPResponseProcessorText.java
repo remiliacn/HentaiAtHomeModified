@@ -26,6 +26,7 @@ package hath.base;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 public class HTTPResponseProcessorText extends HTTPResponseProcessor {
     private final byte[] responseBytes;
@@ -36,17 +37,17 @@ public class HTTPResponseProcessorText extends HTTPResponseProcessor {
         this(responseBody, "text/html");
     }
 
-    public HTTPResponseProcessorText(String responseBody, String mimeType) {
+    public HTTPResponseProcessorText(final String responseBody, final String mimeType) {
         this(responseBody, mimeType, StandardCharsets.ISO_8859_1);
     }
 
-    public HTTPResponseProcessorText(String responseBody, String mimeType, Charset charset) {
+    public HTTPResponseProcessorText(final String responseBody, final String mimeType, final Charset charset) {
         int strlen = responseBody.length();
 
         if (strlen > 0) {
             Out.debug("Response Written:");
 
-            if (strlen < 10000) {
+            if (strlen < 10_000) {
                 Out.debug(responseBody);
             } else {
                 Out.debug("tl;dw");
@@ -58,11 +59,9 @@ public class HTTPResponseProcessorText extends HTTPResponseProcessor {
     }
 
     public int getContentLength() {
-        if (responseBytes != null) {
-            return responseBytes.length;
-        } else {
-            return 0;
-        }
+        return Optional.ofNullable(responseBytes)
+                .map(v -> v.length)
+                .orElse(0);
     }
 
     public String getContentType() {

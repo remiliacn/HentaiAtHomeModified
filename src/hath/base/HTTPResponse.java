@@ -31,51 +31,30 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 public class HTTPResponse {
-    private static final Pattern absoluteUriPattern = Pattern.compile("^http://[^/]+/", Pattern.CASE_INSENSITIVE);
-
     private final HTTPSession session;
-
     private boolean requestHeadOnly;
     private boolean servercmd;
     private int responseStatusCode;
-
     private HTTPResponseProcessor hpc;
+
+    private static final HTTPResponseProcessorText STILL_ALIVE
+            = new HTTPResponseProcessorText("I feel FANTASTIC and I'm still alive");
+    private static final HTTPResponseProcessorText EMPTY_RESPONSE
+            = new HTTPResponseProcessorText("");
+    private static final HTTPResponseProcessorText INVALID_COMMAND
+            = new HTTPResponseProcessorText("INVALID_COMMAND");
+    private static final HTTPResponseProcessorText ROBOT_FILE_ACCESS_RESPONSE
+            = new HTTPResponseProcessorText("User-agent: *\nDisallow: /", "text/plain");
+    private static final int TEN_SECONDS = 10_000;
+    private static final Pattern ABSOLUTE_URI_PATTERN = Pattern.compile("^http://[^/]+/", Pattern.CASE_INSENSITIVE);
+    private static final String ORIGINAL = "org";
+    private static final String EHENTAI_FAVICON_URL = "https://e-hentai.org/favicon.ico";
 
     public HTTPResponse(HTTPSession session) {
         this.session = session;
         servercmd = false;
         requestHeadOnly = false;
-        responseStatusCode = 500;    // if nothing alters this, there's a bug somewhere
-    }
-
-    private HTTPResponseProcessor processRemoteAPICommand(String command, String additional) {
-        Hashtable<String, String> addTable = Tools.parseAdditional(additional);
-        HentaiAtHomeClient client = session.getHTTPServer().getHentaiAtHomeClient();
-
-        try {
-            if (command.equalsIgnoreCase("still_alive")) {
-                return new HTTPResponseProcessorText("I feel FANTASTIC and I'm still alive");
-            } else if (command.equalsIgnoreCase("threaded_proxy_test")) {
-                return processThreadedProxyTest(addTable);
-            } else if (command.equalsIgnoreCase("speed_test")) {
-                String testsize = addTable.get("testsize");
-                return new HTTPResponseProcessorSpeedtest(testsize != null ? Integer.parseInt(testsize) : 1000000);
-            } else if (command.equalsIgnoreCase("refresh_settings")) {
-                client.getServerHandler().refreshServerSettings();
-                return new HTTPResponseProcessorText("");
-            } else if (command.equalsIgnoreCase("start_downloader")) {
-                client.startDownloader();
-                return new HTTPResponseProcessorText("");
-            } else if (command.equalsIgnoreCase("refresh_certs")) {
-                client.setCertRefresh();
-                return new HTTPResponseProcessorText("");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            Out.warning(session + " Failed to process command");
-        }
-
-        return new HTTPResponseProcessorText("INVALID_COMMAND");
+        responseStatusCode = 418;    // if nothing alters this, there's a bug somewhere
     }
 
     private HTTPResponseProcessorText processThreadedProxyTest(Hashtable<String, String> addTable) {
@@ -87,7 +66,8 @@ public class HTTPResponse {
         int testtime = Integer.parseInt(addTable.get("testtime"));
         String testkey = addTable.get("testkey");
 
-        Out.debug("Running speedtest against hostname=" + hostname + " protocol=" + protocol + " port=" + port + " testsize=" + testsize + " testcount=" + testcount + " testtime=" + testtime + " testkey=" + testkey);
+        Out.debug("Running speedtest against hostname=" + hostname + " protocol=" + protocol + " port=" + port
+                + " testsize=" + testsize + " testcount=" + testcount + " testtime=" + testtime + " testkey=" + testkey);
 
         int successfulTests = 0;
         long totalTimeMillis = 0;
@@ -98,7 +78,7 @@ public class HTTPResponse {
             for (int i = 0; i < testcount; i++) {
                 URL source = new URL(protocol == null ? "http" : protocol, hostname, port, "/t/" + testsize + "/" + testtime + "/" + testkey + "/" + (int) Math.floor(Math.random() * Integer.MAX_VALUE));
                 //Out.debug("Test thread: " + source);
-                FileDownloader dler = new FileDownloader(source, 10000, true);
+                FileDownloader dler = new FileDownloader(source, TEN_SECONDS, true);
                 testfiles.add(dler);
                 dler.startAsyncDownload();
             }
@@ -113,12 +93,12 @@ public class HTTPResponse {
             HentaiAtHomeClient.dieWithError(e);
         }
 
-        Out.debug("Ran speedtest against hostname=" + hostname + " testsize=" + testsize + " testcount=" + testcount + ", reporting successfulTests=" + successfulTests + " totalTimeMillis=" + totalTimeMillis);
-
+        Out.debug("Ran speedtest against hostname=" + hostname + " testsize=" + testsize + " testcount=" + testcount
+                + ", reporting successfulTests=" + successfulTests + " totalTimeMillis=" + totalTimeMillis);
         return new HTTPResponseProcessorText("OK:" + successfulTests + "-" + totalTimeMillis);
     }
 
-    public void parseRequest(String request) {
+    public void parseRequest(final String request) {
         if (request == null) {
             Out.debug(session + " Client did not send a request.");
             responseStatusCode = 400;
@@ -133,14 +113,15 @@ public class HTTPResponse {
             return;
         }
 
-        if (!(requestParts[0].equalsIgnoreCase("GET") || requestParts[0].equalsIgnoreCase("HEAD")) || !requestParts[2].startsWith("HTTP/")) {
+        if (!(requestParts[0].equalsIgnoreCase("GET") || requestParts[0].equalsIgnoreCase("HEAD"))
+                || !requestParts[2].startsWith("HTTP/")) {
             Out.debug(session + " HTTP request is not GET or HEAD.");
             responseStatusCode = 405;
             return;
         }
 
         // The request URI may be an absolute path or an absolute URI for GET/HEAD requests (see section 5.1.2 of RFC2616)
-        requestParts[1] = absoluteUriPattern.matcher(requestParts[1]).replaceFirst("/");
+        requestParts[1] = ABSOLUTE_URI_PATTERN.matcher(requestParts[1]).replaceFirst("/");
         String[] urlparts = requestParts[1].replace("%3d", "=").split("/");
 
         if ((urlparts.length < 2) || !urlparts[0].isEmpty()) {
@@ -153,144 +134,202 @@ public class HTTPResponse {
 
         if (urlparts[1].equals("h")) {
             // form: /h/$fileid/$additional/$filename
-
-            if (urlparts.length < 4) {
-                responseStatusCode = 400;
-                return;
-            }
-
-            String fileid = urlparts[2];
-            HVFile requestedHVFile = HVFile.getHVFileFromFileid(fileid);
-            Hashtable<String, String> additional = Tools.parseAdditional(urlparts[3]);
-            boolean keystampRejected = true;
-
-            try {
-                String[] keystampParts = additional.get("keystamp").split("-");
-
-                if (keystampParts.length == 2) {
-                    int keystampTime = Integer.parseInt(keystampParts[0]);
-
-                    if (Math.abs(Settings.getServerTime() - keystampTime) < 900) {
-                        if (keystampParts[1].equalsIgnoreCase(Tools.getSHA1String(keystampTime + "-" + fileid + "-" + Settings.getClientKey() + "-hotlinkthis").substring(0, 10))) {
-                            keystampRejected = false;
-                        }
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-
-            String fileindex = additional.get("fileindex");
-            String xres = additional.get("xres");
-
-            if (keystampRejected) {
-                responseStatusCode = 403;
-            } else if (requestedHVFile == null || fileindex == null || xres == null || !Pattern.matches("^\\d+$", fileindex) || !Pattern.matches("^org|\\d+$", xres)) {
-                Out.debug(session + " Invalid or missing arguments.");
-                responseStatusCode = 404;
-            } else if (requestedHVFile.getLocalFileRef().exists()) {
-                // hpc will update responseStatusCode
-                hpc = new HTTPResponseProcessorFile(requestedHVFile);
-                session.getHTTPServer().getHentaiAtHomeClient().getCacheHandler().markRecentlyAccessed(requestedHVFile);
-            } else if (Settings.isStaticRange(fileid)) {
-                // non-existent file. do an on-demand request of the file directly from the image servers
-                URL[] sources = session.getHTTPServer().getHentaiAtHomeClient().getServerHandler().getStaticRangeFetchURL(fileindex, xres, fileid);
-
-                if (sources == null) {
-                    Out.debug(session + " Sources was empty for fileindex=" + fileindex + " xres=" + xres + " fileid=" + fileid);
-                    responseStatusCode = 404;
-                } else {
-                    // hpc will update responseStatusCode
-                    hpc = new HTTPResponseProcessorProxy(session, fileid, sources);
-                }
-            } else {
-                // file does not exist, and is not in one of the client's static ranges
-                Out.debug(session + " File is not in static ranges for fileindex=" + fileindex + " xres=" + xres + " fileid=" + fileid);
-                responseStatusCode = 404;
-            }
-
+            handleImageSend(urlparts);
             return;
         } else if (urlparts[1].equals("servercmd")) {
             // form: /servercmd/$command/$additional/$time/$key
-
-            if (!Settings.isValidRPCServer(session.getSocketInetAddress())) {
-                Out.debug(session + " Got a servercmd from an unauthorized IP address");
-                responseStatusCode = 403;
-                return;
-            }
-
-            if (urlparts.length < 6) {
-                Out.debug(session + " Got a malformed servercmd");
-                responseStatusCode = 403;
-                return;
-            }
-
-            String command = urlparts[2];
-            String additional = urlparts[3];
-            int commandTime = Integer.parseInt(urlparts[4]);
-            String key = urlparts[5];
-
-            if ((Math.abs(commandTime - Settings.getServerTime()) > Settings.MAX_KEY_TIME_DRIFT) || !Tools.getSHA1String("hentai@home-servercmd-" + command + "-" + additional + "-" + Settings.getClientID() + "-" + commandTime + "-" + Settings.getClientKey()).equals(key)) {
-                Out.debug(session + " Got a servercmd with expired or incorrect key");
-                responseStatusCode = 403;
-                return;
-            }
-
-            responseStatusCode = 200;
-            servercmd = true;
-            hpc = processRemoteAPICommand(command, additional);
+            handleServerCommands(urlparts);
             return;
         } else if (urlparts[1].equals("t")) {
             // form: /t/$testsize/$testtime/$testkey
-
-            if (urlparts.length < 5) {
-                responseStatusCode = 400;
-                return;
-            }
-
-            // send a randomly generated file of a given length for speed testing purposes
-            int testsize = Integer.parseInt(urlparts[2]);
-            int testtime = Integer.parseInt(urlparts[3]);
-            String testkey = urlparts[4];
-
-            if (Math.abs(testtime - Settings.getServerTime()) > Settings.MAX_KEY_TIME_DRIFT) {
-                Out.debug(session + " Got a speedtest request with expired key");
-                responseStatusCode = 403;
-                return;
-            }
-
-            if (!Tools.getSHA1String("hentai@home-speedtest-" + testsize + "-" + testtime + "-" + Settings.getClientID() + "-" + Settings.getClientKey()).equals(testkey)) {
-                Out.debug(session + " Got a speedtest request with invalid key");
-                responseStatusCode = 403;
-                return;
-            }
-
-            Out.debug("Sending threaded proxy test with testsize=" + testsize + " testtime=" + testtime + " testkey=" + testkey);
-
-            responseStatusCode = 200;
-            hpc = new HTTPResponseProcessorSpeedtest(testsize);
+            handleInternetTest(urlparts);
             return;
         } else if (urlparts.length == 2) {
-            if (urlparts[1].equals("favicon.ico")) {
-                // Redirect to the main website icon (which should already be in the browser cache).
-                hpc = new HTTPResponseProcessorText("");
-                hpc.addHeaderField("Location", "https://e-hentai.org/favicon.ico");
-                responseStatusCode = 301; // Moved Permanently
-                return;
-            } else if (urlparts[1].equals("robots.txt")) {
-                // Bots are not welcome.
-                hpc = new HTTPResponseProcessorText("User-agent: *\nDisallow: /", "text/plain");
-                responseStatusCode = 200; // Found
-                return;
-            }
+            handleSpecialRequests(urlparts);
+            return;
         }
 
         Out.debug(session + " Invalid request type '" + urlparts[1]);
         responseStatusCode = 404;
     }
 
+    private void handleImageSend(String[] urlparts) {
+        if (urlparts.length < 4) {
+            responseStatusCode = 418;
+            return;
+        }
+
+        String fileid = urlparts[2];
+        HVFile requestedHVFile = HVFile.getHVFileFromFileid(fileid);
+        Hashtable<String, String> additional = Tools.parseAdditional(urlparts[3]);
+        boolean keystampRejected = true;
+
+        try {
+            String[] keystampParts = additional.get("keystamp").split("-");
+            if (keystampParts.length == 2) {
+                int keystampTime = Integer.parseInt(keystampParts[0]);
+
+                if (Math.abs(Settings.getServerTime() - keystampTime) < 900) {
+                    if (keystampParts[1].equalsIgnoreCase(
+                            Tools.getSHA1String(keystampTime + "-" + fileid + "-" + Settings.getClientKey()
+                                    + "-hotlinkthis").substring(0, 10))) {
+                        keystampRejected = false;
+                    }
+                }
+            }
+        } catch (NumberFormatException ignored) {
+        }
+
+        String fileindex = additional.get("fileindex");
+        String xres = additional.get("xres");
+
+        if (keystampRejected) {
+            responseStatusCode = 403;
+        } else if (requestedHVFile == null || fileindex == null || xres == null
+                || !Tools.isDigit(fileindex)
+                || !(Tools.isDigit(fileindex) || xres.equals(ORIGINAL))) {
+            Out.info(session + " Invalid or missing arguments.");
+            responseStatusCode = 404;
+        } else if (requestedHVFile.getLocalFileRef().exists()) {
+            // hpc will update responseStatusCode
+            hpc = new HTTPResponseProcessorFile(requestedHVFile);
+            session.getHTTPServer()
+                    .getHentaiAtHomeClient()
+                    .getCacheHandler()
+                    .markRecentlyAccessed(requestedHVFile);
+        } else if (Settings.isStaticRange(fileid)) {
+            // non-existent file. do an on-demand request of the file directly from the image servers
+            URL[] sources = session.getHTTPServer()
+                    .getHentaiAtHomeClient()
+                    .getServerHandler()
+                    .getStaticRangeFetchURL(fileindex, xres, fileid);
+
+            if (sources == null) {
+                Out.debug(session + " Sources was empty for fileindex=" + fileindex + " xres=" + xres + " fileid=" + fileid);
+                responseStatusCode = 404;
+            } else {
+                // hpc will update responseStatusCode
+                hpc = new HTTPResponseProcessorProxy(session, fileid, sources);
+            }
+        } else {
+            // file does not exist, and is not in one of the client's static ranges
+            Out.debug(session + " File is not in static ranges for fileindex=" + fileindex + " xres=" + xres + " fileid=" + fileid);
+            responseStatusCode = 404;
+        }
+    }
+
+    private void handleServerCommands(String[] urlparts) {
+        if (!Settings.isValidRPCServer(session.getSocketInetAddress())) {
+            Out.debug(session + " Got a servercmd from an unauthorized IP address");
+            responseStatusCode = 403;
+            return;
+        }
+
+        if (urlparts.length < 6) {
+            Out.debug(session + " Got a malformed servercmd");
+            responseStatusCode = 403;
+            return;
+        }
+
+        String command = urlparts[2];
+        String additional = urlparts[3];
+        int commandTime = Integer.parseInt(urlparts[4]);
+        String key = urlparts[5];
+
+        if ((Math.abs(commandTime - Settings.getServerTime()) > Settings.MAX_KEY_TIME_DRIFT)
+                || !Tools.getSHA1String("hentai@home-servercmd-" + command + "-" + additional
+                + "-" + Settings.getClientID() + "-" + commandTime + "-" + Settings.getClientKey()).equals(key)) {
+            Out.debug(session + " Got a servercmd with expired or incorrect key");
+            responseStatusCode = 403;
+            return;
+        }
+
+        responseStatusCode = 200;
+        servercmd = true;
+        hpc = processRemoteAPICommand(command, additional);
+    }
+
+    private HTTPResponseProcessor processRemoteAPICommand(String command, String additional) {
+        Hashtable<String, String> addTable = Tools.parseAdditional(additional);
+        HentaiAtHomeClient client = session.getHTTPServer().getHentaiAtHomeClient();
+
+        try {
+            if (command.equalsIgnoreCase("still_alive")) {
+                return STILL_ALIVE;
+            } else if (command.equalsIgnoreCase("threaded_proxy_test")) {
+                return processThreadedProxyTest(addTable);
+            } else if (command.equalsIgnoreCase("speed_test")) {
+                String testsize = addTable.get("testsize");
+                return new HTTPResponseProcessorSpeedtest(testsize != null ? Integer.parseInt(testsize) : 1_000_000);
+            } else if (command.equalsIgnoreCase("refresh_settings")) {
+                client.getServerHandler().refreshServerSettings();
+                return EMPTY_RESPONSE;
+            } else if (command.equalsIgnoreCase("start_downloader")) {
+                client.startDownloader();
+                return EMPTY_RESPONSE;
+            } else if (command.equalsIgnoreCase("refresh_certs")) {
+                client.setCertRefresh();
+                return EMPTY_RESPONSE;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            Out.warning(session + " Failed to process command");
+        }
+
+        return INVALID_COMMAND;
+    }
+
+    private void handleInternetTest(String[] urlparts) {
+        if (urlparts.length < 5) {
+            responseStatusCode = 400;
+            return;
+        }
+
+        // send a randomly generated file of a given length for speed testing purposes
+        int testsize = Integer.parseInt(urlparts[2]);
+        int testtime = Integer.parseInt(urlparts[3]);
+        String testkey = urlparts[4];
+
+        if (Math.abs(testtime - Settings.getServerTime()) > Settings.MAX_KEY_TIME_DRIFT) {
+            Out.debug(session + " Got a speedtest request with expired key");
+            responseStatusCode = 403;
+            return;
+        }
+
+        if (!Tools.getSHA1String("hentai@home-speedtest-" + testsize + "-" + testtime + "-"
+                + Settings.getClientID() + "-" + Settings.getClientKey()).equals(testkey)) {
+            Out.debug(session + " Got a speedtest request with invalid key");
+            responseStatusCode = 403;
+            return;
+        }
+
+        Out.debug("Sending threaded proxy test with testsize=" + testsize + " testtime=" + testtime + " testkey=" + testkey);
+
+        responseStatusCode = 200;
+        hpc = new HTTPResponseProcessorSpeedtest(testsize);
+    }
+
+
+    private void handleSpecialRequests(String[] urlparts) {
+        if (urlparts[1].equals("favicon.ico")) {
+            // Redirect to the main website icon (which should already be in the browser cache).
+            hpc = EMPTY_RESPONSE;
+            hpc.addHeaderField("Location", EHENTAI_FAVICON_URL);
+            responseStatusCode = 301; // Moved Permanently
+        } else if (urlparts[1].equals("robots.txt")) {
+            // Bots are not welcome.
+            hpc = ROBOT_FILE_ACCESS_RESPONSE;
+            responseStatusCode = 200; // Found
+        }
+    }
+
     public HTTPResponseProcessor getHTTPResponseProcessor() {
         if (hpc == null) {
-            hpc = new HTTPResponseProcessorText("An error has occurred. (" + responseStatusCode + ")");
+            if (responseStatusCode == 418) {
+                hpc = new HTTPResponseProcessorText("That's cute.");
+            } else {
+                hpc = new HTTPResponseProcessorText("An error has occurred. (" + responseStatusCode + ")");
+            }
 
             if (responseStatusCode == 405) {
                 hpc.addHeaderField("Allow", "GET,HEAD");
