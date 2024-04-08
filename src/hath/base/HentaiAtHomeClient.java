@@ -65,7 +65,6 @@ public class HentaiAtHomeClient implements Runnable {
     private ServerHandler serverHandler;
     private final Thread myThread;
     private GalleryDownloader galleryDownloader = null;
-    private final Runtime runtime;
     private int threadSkipCounter;
     private long suspendedUntil;
     private final String[] args;
@@ -76,7 +75,6 @@ public class HentaiAtHomeClient implements Runnable {
         shutdown = false;
         reportShutdown = false;
         threadInterruptable = false;
-        runtime = Runtime.getRuntime();
 
         myThread = new Thread(this);
         myThread.start();
@@ -189,8 +187,6 @@ public class HentaiAtHomeClient implements Runnable {
 
         long lastThreadTime = 0;
 
-        System.gc();
-
         Out.info("H@H initialization completed successfully. Starting normal operation");
 
         while (!shutdown) {
@@ -294,10 +290,6 @@ public class HentaiAtHomeClient implements Runnable {
                                 + Settings.getClientID());
                     }
                 }
-
-                System.gc();
-                Out.debug("Memory total=" + runtime.totalMemory() / 1024 + "kB free=" + runtime.freeMemory() / 1024
-                        + "kB max=" + runtime.maxMemory() / 1024 + "kB");
                 ++threadSkipCounter;
             }
 

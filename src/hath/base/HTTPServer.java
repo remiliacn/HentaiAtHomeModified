@@ -123,7 +123,7 @@ public class HTTPServer implements Runnable {
             Out.info("Starting up the internal HTTP Server...");
             SSLServerSocketFactory ssf = sslContext.getServerSocketFactory();
             listener = (SSLServerSocket) ssf.createServerSocket(port);
-            listener.setEnabledProtocols(new String[]{"TLSv1.3", "TLSv1.2", "TLSv1"});
+            listener.setEnabledProtocols(new String[]{"TLSv1.3", "TLSv1.2", "TLSv1.1"});
 
             Out.debug("Initialized SSLContext with cert " + certFile + " and protocol " + sslContext.getProtocol());
             Out.debug("Supported ciphers: " + Arrays.toString(sslContext.getSupportedSSLParameters().getCipherSuites()));
@@ -198,7 +198,6 @@ public class HTTPServer implements Runnable {
         }
 
         toPrune.clear();
-        System.gc();
     }
 
     public void nukeOldConnections() {

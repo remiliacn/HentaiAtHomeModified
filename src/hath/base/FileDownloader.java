@@ -228,8 +228,9 @@ public class FileDownloader implements Runnable {
                                 timeFirstByte = System.currentTimeMillis();
                             }
 
+                            //noinspection StatementWithEmptyBody
                             if (discardData) {
-                                Out.debug("Skipped " + readbytes + " bytes");
+                                // Out.debug("Skipped " + readbytes + " bytes");
                             } else if (outputPath == null) {
                                 byteBuffer.put(buffer, 0, readbytes);
                                 //Out.debug("Added " + readbytes + " bytes to byteBuffer");

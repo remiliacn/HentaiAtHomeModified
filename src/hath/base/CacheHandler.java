@@ -96,7 +96,6 @@ public class CacheHandler {
 
             // do the initial cache cleanup/reorg. this will move any qualifying files left in the first-level cache directory to the second level.
             startupCacheCleanup();
-            System.gc();
 
             if (client.isShuttingDown()) {
                 return;
@@ -118,7 +117,6 @@ public class CacheHandler {
             // this verifies that the files are the correct size and in an assigned static range, and optionally verifies the SHA-1 hash.
             // the staticRangeOldest hashtable of static ranges and the oldest file timestamp in that range will also be built here.
             startupInitCache();
-            System.gc();
         }
 
         if (!recheckFreeDiskSpace()) {
@@ -145,7 +143,6 @@ public class CacheHandler {
                 }
 
                 recheckFreeDiskSpace();
-                System.gc();
             }
 
             Out.info("CacheHandler: Finished startup cache pruning");
@@ -237,8 +234,6 @@ public class CacheHandler {
         } catch (Exception e) {
             Out.debug(e.getMessage());
         }
-
-        System.gc();
 
         return success;
     }
@@ -337,9 +332,6 @@ public class CacheHandler {
         int checkedCounter = 0, checkedCounterPct = 0;
 
         for (File l1dir : l1dirs) {
-            // time to take out the trash
-            System.gc();
-
             if (!l1dir.isDirectory()) {
                 l1dir.delete();
                 continue;
@@ -427,9 +419,6 @@ public class CacheHandler {
             }
 
             for (File l2dir : l2dirs) {
-                // the garbage, it must be collected
-                System.gc();
-
                 if (!l2dir.isDirectory()) {
                     continue;
                 }
