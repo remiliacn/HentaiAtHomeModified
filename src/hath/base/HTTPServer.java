@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,7 +17,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
@@ -51,17 +51,11 @@ public class HTTPServer implements Runnable {
     private HTTPBandwidthMonitor bandwidthMonitor = null;
     private SSLServerSocket listener = null;
     private final List<HTTPSession> sessions;
-    private int sessionCount = 0;
-    private int currentConnId = 0;
-    private boolean allowNormalConnections = false;
-    private boolean isRestarting = false;
-    private boolean isTerminated = false;
+    private int sessionCount = 0, currentConnId = 0;
+    private boolean allowNormalConnections = false, isRestarting = false, isTerminated = false;
     private final Hashtable<String, FloodControlEntry> floodControlTable;
-    private final Pattern localNetworkPattern;
+    private static final Pattern LOCAL_NETWORK_PATTERN = Pattern.compile("^((localhost)|(127\\.)|(10\\.)|(192\\.168\\.)|(172\\.((1[6-9])|(2[0-9])|(3[0-1]))\\.)|(169\\.254\\.)|(::1)|(0:0:0:0:0:0:0:1)|(fc)|(fd)).*$");
     private Date certExpiry;
-    private static final long ONE_DAY = 86_400_000L;
-    private static final int TEN_SECONDS = 10_000;
-
 
     public HTTPServer(HentaiAtHomeClient client) {
         this.client = client;
@@ -71,11 +65,6 @@ public class HTTPServer implements Runnable {
         if (!Settings.isDisableBWM()) {
             bandwidthMonitor = new HTTPBandwidthMonitor();
         }
-
-        //  private network: localhost, 127.x.y.z, 10.0.0.0 - 10.255.255.255, 172.16.0.0 - 172.31.255.255,  192.168.0.0 - 192.168.255.255, 169.254.0.0 -169.254.255.255
-        localNetworkPattern = Pattern.compile(
-                "^((localhost)|(127\\.)|(10\\.)|(192\\.168\\.)|(172\\.((1[6-9])|(2[0-9])" +
-                        "|(3[0-1]))\\.)|(169\\.254\\.)|(::1)|(0:0:0:0:0:0:0:1)|(fc)|(fd)).*$");
     }
 
     public boolean startConnectionListener(int port) {
@@ -85,12 +74,12 @@ public class HTTPServer implements Runnable {
             Out.info("Requesting certificate from server...");
             File certFile = new File(Settings.getDataDir(), "hathcert.p12");
             URL certUrl = ServerHandler.getServerConnectionURL(ServerHandler.ACT_GET_CERTIFICATE);
-            FileDownloader certdl = new FileDownloader(certUrl, TEN_SECONDS, certFile.toPath());
+            FileDownloader certdl = new FileDownloader(certUrl, 10000, 300000, certFile.toPath(), false);
             certdl.downloadFile();
 
             if (!certFile.exists()) {
                 Out.error("Could not retrieve certificate file " + certFile);
-                return true;
+                return false;
             }
 
             KeyStore ks = KeyStore.getInstance("PKCS12");
@@ -101,10 +90,11 @@ public class HTTPServer implements Runnable {
             certExpiry = cert.getNotAfter();
 
             Out.debug("Initialized KeyStore with " + cert.getSubjectX500Principal().getName());
+            //Out.debug("Initialized KeyStore with cert=" + cert.toString());
 
             if (isCertExpired()) {
                 Out.error("The retrieved certificate is expired, or the system time is off by more than a day. Correct the system time and try again.");
-                return true;
+                return false;
             }
 
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
@@ -134,7 +124,7 @@ public class HTTPServer implements Runnable {
 
             Out.info("Internal HTTP Server was successfully started, and is listening on port " + port);
 
-            return false;
+            return true;
         } catch (Exception e) {
             allowNormalConnections();
 
@@ -146,17 +136,15 @@ public class HTTPServer implements Runnable {
             Out.info("In order to fix this, either shut down whatever else is using the port, or assign a different port to H@H.");
 
             if (port < 1024) {
-                Out.info("It could also be caused by trying to use port " + port
-                        + " on a system that disallows non-root users from binding to low ports.");
-                Out.info("For information on how to work around this, " +
-                        "read this post: https://forums.e-hentai.org/index.php?showtopic=232693");
+                Out.info("It could also be caused by trying to use port " + port + " on a system that disallows non-root users from binding to low ports.");
+                Out.info("For information on how to work around this, read this post: https://forums.e-hentai.org/index.php?showtopic=232693");
             }
 
             Out.info("************************************************************************************************************************************");
             Out.info("");
         }
 
-        return true;
+        return false;
     }
 
     public boolean isCertExpired() {
@@ -165,7 +153,7 @@ public class HTTPServer implements Runnable {
         Out.debug("Current system time is " + nowtime + " (" + nowtime.getTime() + ")");
         Out.debug("Certificate expires on " + certExpiry + " (" + certExpiry.getTime() + ")");
 
-        return certExpiry.getTime() < nowtime.getTime() + ONE_DAY;
+        return certExpiry.getTime() < nowtime.getTime() + 86400000L;
     }
 
     public void stopConnectionListener(boolean restart) {
@@ -212,7 +200,9 @@ public class HTTPServer implements Runnable {
                 }
             }
 
-            remove.forEach(this::removeHTTPSession);
+            for (HTTPSession session : remove) {
+                removeHTTPSession(session);
+            }
         }
 
         if (!remove.isEmpty()) {
@@ -232,9 +222,7 @@ public class HTTPServer implements Runnable {
                 boolean forceClose = false;
                 InetAddress addr = socket.getInetAddress();
                 String hostAddress = addr.getHostAddress().toLowerCase();
-                boolean localNetworkAccess = Settings.getClientHost()
-                        .replace("::ffff:", "")
-                        .equals(hostAddress) || localNetworkPattern.matcher(hostAddress).matches();
+                boolean localNetworkAccess = Settings.getClientHost().replace("::ffff:", "").equals(hostAddress) || LOCAL_NETWORK_PATTERN.matcher(hostAddress).matches();
                 boolean apiServerAccess = Settings.isValidRPCServer(addr);
 
                 if (!apiServerAccess && !allowNormalConnections) {
@@ -258,8 +246,7 @@ public class HTTPServer implements Runnable {
                             // this flood control will stop clients from opening more than ten connections over a (roughly) five second floating window, and forcibly block them for 60 seconds if they do.
                             FloodControlEntry fce;
                             synchronized (floodControlTable) {
-                                fce = floodControlTable.computeIfAbsent(hostAddress,
-                                        k -> new FloodControlEntry());
+                                fce = floodControlTable.computeIfAbsent(hostAddress, k -> new FloodControlEntry());
                             }
 
                             if (!fce.isBlocked()) {

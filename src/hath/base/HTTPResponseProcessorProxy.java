@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,14 +17,12 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.base;
 
-import java.io.IOException;
-import java.net.SocketException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 
@@ -33,7 +31,6 @@ public class HTTPResponseProcessorProxy extends HTTPResponseProcessor {
     private final ProxyFileDownloader proxyDownloader;
     private int readoff = 0;
     private ByteBuffer tcpBuffer;
-    private static final int THIRTY_SECONDS = 30_000;
 
     public HTTPResponseProcessorProxy(HTTPSession session, String fileid, URL[] sources) {
         this.session = session;
@@ -54,21 +51,22 @@ public class HTTPResponseProcessorProxy extends HTTPResponseProcessor {
         return proxyDownloader.getContentLength();
     }
 
-    public ByteBuffer getPreparedTCPBuffer() throws IOException {
+    public ByteBuffer getPreparedTCPBuffer() throws Exception {
         tcpBuffer.clear();
 
         int timeout = 0;
         int nextReadThrehold = Math.min(getContentLength(), readoff + tcpBuffer.limit());
+        //Out.debug("Filling buffer with limit=" + tcpBuffer.limit() + " at readoff=" + readoff + ", trying to read " + (nextReadThrehold - readoff) + " bytes up to byte " + nextReadThrehold);
 
         while (nextReadThrehold > proxyDownloader.getCurrentWriteoff()) {
             try {
                 Thread.sleep(10);
-            } catch (Exception ignored) {
+            } catch (InterruptedException ignored) {
             }
 
-            if (++timeout > THIRTY_SECONDS) {
+            if (++timeout > 30000) {
                 // we have waited about five minutes, probably won't happen
-                throw new SocketException("Timeout while waiting for proxy request.");
+                throw new Exception("Timeout while waiting for proxy request.");
             }
         }
 

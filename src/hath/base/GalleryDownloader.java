@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,7 +17,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 public class GalleryDownloader implements Runnable {
-    public static final int THIRTY_SECONDS = 30000;
     protected HentaiAtHomeClient client;
     private final FileValidator validator;
     protected HTTPBandwidthMonitor downloadLimiter;
@@ -65,10 +64,10 @@ public class GalleryDownloader implements Runnable {
 
             Out.info("GalleryDownloader: Starting download of gallery: " + title);
 
-            int galleryretry = 0;
+            int galleryretry = 0, totalFailedFiles = 0;
             boolean success = false;
 
-            while (!success && ++galleryretry < 10) {
+            while (!success && ++galleryretry < 10 && totalFailedFiles < filecount * 2) {
                 int successfulFiles = 0;
 
                 for (GalleryFile gFile : galleryFiles) {
@@ -92,6 +91,7 @@ public class GalleryDownloader implements Runnable {
                         } else if (downloadState == GalleryFile.STATE_ALREADY_DOWNLOADED) {
                             ++successfulFiles;
                         } else if (downloadState == GalleryFile.STATE_DOWNLOAD_FAILED) {
+                            ++totalFailedFiles;
                             sleepTime = 5000;
                         }
                     }
@@ -157,7 +157,7 @@ public class GalleryDownloader implements Runnable {
         }
 
         // this does two things: marks the previous gallery as downloaded and removes it from the queue, and fetches metadata of the next gallery in the queue
-        FileDownloader metaDownloader = new FileDownloader(metaurl, THIRTY_SECONDS);
+        FileDownloader metaDownloader = new FileDownloader(metaurl, 30000, 30000);
         String galleryMeta = metaDownloader.getResponseAsString("UTF8");
 
         if (galleryMeta == null) {
@@ -235,10 +235,21 @@ public class GalleryDownloader implements Runnable {
                             // MINXRES must be passed before TITLE for this to work. the only purpose is to make distinct titles
                             String xresTitle = minxres.equals("org") ? "" : "-" + minxres + "x";
 
-                            if (title.length() > 100) {
-                                todir = new File(Settings.getDownloadDir(), title.substring(0, 97) + "... [" + gid + xresTitle + "]");
+                            String postfix = " [" + gid + xresTitle + "]";
+
+                            int titleLength = title.length();
+                            int postfixLength = postfix.length();
+                            int maxFilenameLength = Settings.getMaxFilenameLength();
+
+                            // many filesystems have a maximum file length of 255 *bytes*. title.length() calculates the length in UTF-16 code units (16-bit unicode). we therefore default to a maxFilenameLength of 125 UTF-16 chars, since this should be safe on all systems
+                            if (titleLength + postfixLength > maxFilenameLength) {
+                                // we need to count code points to avoid splitting any UTF-16 surrogate pairs representing surrogate characters
+                                int codePointLength = title.codePointCount(0, maxFilenameLength - postfixLength - 3);
+                                String truncatedTitle = title.substring(0, title.offsetByCodePoints(0, codePointLength));
+                                Out.debug("Truncated title with titleLength=" + titleLength + " postfixLength=" + postfixLength + " codePointLength=" + codePointLength + " truncatedTitle=" + truncatedTitle);
+                                todir = new File(Settings.getDownloadDir(), truncatedTitle + "..." + postfix);
                             } else {
-                                todir = new File(Settings.getDownloadDir(), title + " [" + gid + xresTitle + "]");
+                                todir = new File(Settings.getDownloadDir(), title + postfix);
                             }
 
                             // just in case, check for directory traversal
@@ -250,7 +261,8 @@ public class GalleryDownloader implements Runnable {
 
                             try {
                                 Tools.checkAndCreateDir(todir);
-                            } catch (Exception ignored) {
+                            } catch (Exception e) {
+                                e.printStackTrace();
                             }
 
                             if (!todir.exists()) {
@@ -267,6 +279,7 @@ public class GalleryDownloader implements Runnable {
                     String[] split = s.split(" ", 6);
                     int page = Integer.parseInt(split[0]);
                     GalleryFile gf = getGalleryFile(split, page);
+
                     Out.debug("GalleryDownloader: Parsed file " + gf);
                     galleryFiles[page - 1] = gf;
                 } else {
@@ -282,7 +295,7 @@ public class GalleryDownloader implements Runnable {
         return gid > 0 && filecount > 0 && minxres != null && title != null && todir != null && galleryFiles != null;
     }
 
-    private GalleryFile getGalleryFile(String[] split, int page) {
+    private GalleryFile getGalleryFile(final String[] split, final int page) {
         int fileindex = Integer.parseInt(split[1]);
         String xres = split[2];
 
@@ -347,8 +360,8 @@ public class GalleryDownloader implements Runnable {
                             verified = true;
                             Out.debug("GalleryDownloader: Verified SHA-1 hash for " + this + ": " + expectedSHA1Hash);
                         }
-                    } catch (java.io.IOException e) {
-                        Out.warning("GalleryDownloader: Encountered I/O error while validating " + tofile);
+                    } catch (Exception e) {
+                        Out.warning("GalleryDownloader: Encountered error while validating " + tofile);
                         e.printStackTrace();
                     }
                 }
@@ -361,32 +374,28 @@ public class GalleryDownloader implements Runnable {
                 }
             }
 
-            // if this turns out to be a file that can be handled by this client, the returned link will be to localhost,
-            // which will trigger a static range fetch using the standard mechanism
-            // we don't have enough information at this point to initiate a ProxyFileDownload directly,
-            // so while the extra roundtrip might seem wasteful, it is necessary (and usually fairly rare)
-            URL source = client.getServerHandler().getDownloaderFetchURL(gid, page, fileindex, xres, ++fileretry > 1);
+            // if this turns out to be a file that can be handled by this client, the returned link will be to localhost, which will trigger a static range fetch using the standard mechanism
+            // we don't have enough information at this point to initiate a ProxyFileDownload directly, so while the extra roundtrip might seem wasteful, it is necessary (and usually fairly rare)
+            URL source = client.getServerHandler().getDownloaderFetchURL(gid, page, fileindex, xres, ++fileretry);
 
             if (source != null) {
-                FileDownloader dler = new FileDownloader(source, 10_000, tofile.toPath());
-                dler.setDownloadLimiter(downloadLimiter);
-                fileComplete = dler.downloadFile();
-
                 try {
+                    FileDownloader dler = new FileDownloader(source, 10000, 300000, tofile.toPath(), fileretry > 1);
+                    dler.setDownloadLimiter(downloadLimiter);
+                    fileComplete = dler.downloadFile();
+
                     if (fileComplete && expectedSHA1Hash != null) {
                         if (!validator.validateFile(tofile.toPath(), expectedSHA1Hash)) {
                             fileComplete = false;
-                            tofile.delete();
                             Out.debug("GalleryDownloader: Corrupted download for " + this + ", forcing retry");
                         } else {
                             Out.debug("GalleryDownloader: Verified SHA-1 hash for " + this + ": " + expectedSHA1Hash);
                         }
                     }
-                } catch (java.io.IOException e) {
-                    Out.warning("GalleryDownloader: Encountered I/O error while validating " + tofile);
+                } catch (Exception e) {
+                    Out.warning("GalleryDownloader: Encountered error while downloading " + tofile);
                     e.printStackTrace();
                     fileComplete = false;
-                    tofile.delete();
                 }
 
                 Out.debug("GalleryDownloader: Download of " + this + " " + (fileComplete ? "successful" : "FAILED") + " (attempt=" + fileretry + ")");
@@ -397,6 +406,10 @@ public class GalleryDownloader implements Runnable {
                 } else {
                     logFailure(source.getHost() + "-" + fileindex + "-" + xres);
                 }
+            }
+
+            if (!fileComplete && tofile.isFile()) {
+                tofile.delete();
             }
 
             return fileComplete ? STATE_DOWNLOAD_SUCCESSFUL : STATE_DOWNLOAD_FAILED;

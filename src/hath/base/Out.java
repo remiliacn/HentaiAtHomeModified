@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,7 +17,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
@@ -25,6 +25,7 @@ package hath.base;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -32,7 +33,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-@SuppressWarnings("SynchronizeOnNonFinalField")
 public class Out {
     public static final int DEBUG = 1;
     public static final int INFO = 2;
@@ -46,11 +46,10 @@ public class Out {
 
     private static boolean overridden, writeLogs;
     private static int suppressedOutput, logout_count, logerr_count;
-    private static PrintStream def_out;
-    private static PrintStream def_err;
+    private static PrintStream def_out, def_err;
     private static OutPrintStream or_out;
     private static FileWriter logout, logerr;
-    private static List<OutListener> outListeners;
+    private static final List<OutListener> outListeners = new ArrayList<>();
 
     static {
         overrideDefaultOutput();
@@ -63,9 +62,9 @@ public class Out {
 
         writeLogs = false;
         overridden = true;
-        outListeners = new ArrayList<>();
 
         suppressedOutput = 0;
+
         def_out = System.out;
         def_err = System.err;
 
@@ -109,7 +108,7 @@ public class Out {
         if (logout != null) {
             try {
                 logout.flush();
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
         }
     }

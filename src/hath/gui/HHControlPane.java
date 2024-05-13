@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,16 +17,16 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home GUI.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home GUI.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.gui;
 
-import javax.swing.*;
 import java.awt.*;
 import java.text.DecimalFormat;
 import java.util.Arrays;
+import javax.swing.*;
 
 import hath.base.Settings;
 import hath.base.StatListener;
@@ -34,12 +34,9 @@ import hath.base.Stats;
 
 public class HHControlPane extends JPanel {
 
-    public static final String PER_SECOND = "/s";
     private final HentaiAtHomeClientGUI clientGUI;
     private final StatPane statPane;
-    private static final String[] ARG_STRINGS = {"Client Status:", "Uptime:", "Last Check-In:", "Total Files Sent:",
-            "Total Files Rcvd:", "Total Bytes Sent:", "Total Bytes Rcvd:", "Avg Bytes Sent:", "Avg Bytes Rcvd:",
-            "Cache Filecount:", "Used Cache Size:", "Cache Utilization:", "Free Cache Size:", "Static Ranges:", "Connections:"};
+    private static final String[] ARG_STRINGS = {"Client Status:", "Uptime:", "Last Check-In:", "Total Files Sent:", "Total Files Rcvd:", "Total Bytes Sent:", "Total Bytes Rcvd:", "Avg Bytes Sent:", "Avg Bytes Rcvd:", "Cache Filecount:", "Used Cache Size:", "Cache Utilization:", "Free Cache Size:", "Static Ranges:", "Connections:"};
     private int[] argLengths = null;
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("0.00");
 
@@ -61,15 +58,13 @@ public class HHControlPane extends JPanel {
     }
 
     private class StatPane extends JPanel implements StatListener {
-        private static final Font FONT = new Font("Sans-serif", Font.PLAIN, 10);
+        private Font myFont;
 
         public StatPane() {
             super();
 
             setPreferredSize(new Dimension(350, 220));
-            setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Program Stats"),
-                            BorderFactory.createEmptyBorder(5, 5, 5, 5)), getBorder()));
+            setBorder(BorderFactory.createCompoundBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Program Stats"), BorderFactory.createEmptyBorder(5, 5, 5, 5)), getBorder()));
             Stats.addStatListener(this);
 
             repaint();
@@ -93,7 +88,11 @@ public class HHControlPane extends JPanel {
 
             super.paint(g);
 
-            g2.setFont(FONT);
+            if (myFont == null) {
+                myFont = new Font("Sans-serif", Font.PLAIN, 10);
+            }
+
+            g2.setFont(myFont);
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(Color.BLACK);
 
@@ -133,25 +132,23 @@ public class HHControlPane extends JPanel {
 
             g2.drawString(Stats.getProgramStatus(), x1pos, yoff);
             g2.drawString((Stats.getUptime() / 3600) + " hr " + ((Stats.getUptime() % 3600) / 60) + " min", x1pos, yoff + yspace);
-            g2.drawString(lastServerContact == 0 ? "Never"
-                    : (int) (System.currentTimeMillis() / 1000) - lastServerContact + " sec ago", x2pos, yoff + yspace);
-            g2.drawString(Long.toString(Stats.getFilesSent()).concat(""), x1pos, yoff + yspace * 2);
-            g2.drawString(Long.toString(Stats.getFilesRcvd()).concat(""), x2pos, yoff + yspace * 2);
+            g2.drawString(lastServerContact == 0 ? "Never" : (int) (System.currentTimeMillis() / 1000) - lastServerContact + " sec ago", x2pos, yoff + yspace);
+            g2.drawString(Stats.getFilesSent() + "", x1pos, yoff + yspace * 2);
+            g2.drawString(Stats.getFilesRcvd() + "", x2pos, yoff + yspace * 2);
             g2.drawString(StorageUnit.of(rawbytesSent).format(rawbytesSent), x1pos, yoff + yspace * 3);
             g2.drawString(StorageUnit.of(rawbytesRcvd).format(rawbytesRcvd), x2pos, yoff + yspace * 3);
-            g2.drawString(StorageUnit.of(rawbytesSentPerSec)
-                    .format(rawbytesSentPerSec).concat(PER_SECOND), x1pos, yoff + yspace * 4);
-            g2.drawString(StorageUnit.of(rawbytesRcvdPerSec).format(rawbytesRcvdPerSec)
-                    .concat(PER_SECOND), x2pos, yoff + yspace * 4);
-            g2.drawString(Integer.toString(Stats.getCacheCount()).concat(""), x1pos, yoff + yspace * 5);
+            g2.drawString(StorageUnit.of(rawbytesSentPerSec).format(rawbytesSentPerSec) + "/s", x1pos, yoff + yspace * 4);
+            g2.drawString(StorageUnit.of(rawbytesRcvdPerSec).format(rawbytesRcvdPerSec) + "/s", x2pos, yoff + yspace * 4);
+            g2.drawString(Stats.getCacheCount() + "", x1pos, yoff + yspace * 5);
             g2.drawString(StorageUnit.of(rawcacheSize).format(rawcacheSize), x2pos, yoff + yspace * 5);
-            g2.drawString(DECIMAL_FORMAT.format(Stats.getCacheFill() * 100).concat("%"), x1pos, yoff + yspace * 6);
+            g2.drawString(DECIMAL_FORMAT.format(Stats.getCacheFill() * 100) + "%", x1pos, yoff + yspace * 6);
             g2.drawString(StorageUnit.of(rawcacheFree).format(rawcacheFree), x2pos, yoff + yspace * 6);
             g2.drawString(Settings.getStaticRangeCount() + "", x1pos, yoff + yspace * 7);
             g2.drawString(Stats.getOpenConnections() + " / " + Settings.getMaxConnections(), x2pos, yoff + yspace * 7);
         }
     }
 
+    @SuppressWarnings("MathRoundingWithIntArgument")
     private class GraphPane extends JPanel implements StatListener {
         private short[] graphHeights;
         private int peakSpeedKBps = 0;
@@ -178,7 +175,6 @@ public class HHControlPane extends JPanel {
             }
         }
 
-        @SuppressWarnings("MathRoundingWithIntArgument")
         public void paint(Graphics g) {
             if (!clientGUI.isShowing()) {
                 return;

@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,7 +17,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
@@ -25,7 +25,6 @@ package hath.base;
 
 import static hath.base.Tools.humanReadableByteCountBin;
 
-import javax.net.ssl.SSLSocket;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -40,29 +39,28 @@ import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Locale;
 import java.util.regex.Pattern;
+import javax.net.ssl.SSLSocket;
 
 public class HTTPSession implements Runnable {
+
+    public static final String CRLF = "\r\n";
+
+    private static final Pattern getheadPattern = Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
     private final SSLSocket socket;
     private final HTTPServer httpServer;
     private final int connId;
+    private Thread myThread;
     private final boolean localNetworkAccess;
     private final long sessionStartTime;
     private long lastPacketSend;
     private HTTPResponse httpResponse;
 
-    private static final String CRLF = "\r\n";
     private static final DecimalFormat DECIMAL_FORMATTER = new DecimalFormat("#.##");
-    private static final Pattern getheadPattern =
-            Pattern.compile("^((GET)|(HEAD)).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final DateTimeFormatter DATE_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss")
                     .localizedBy(Locale.US)
                     .withZone(ZoneId.of("UTC"));
-    private static final int SOCKET_TIMEOUT_MILLISECONDS = 20_000;
-    private static final int ONE_SECOND = 1000;
-    private static final int THIRTY_SECONDS = 30_000;
-    private static final int THREE_MINUTES = 180_000;
-    private static final int THIRTY_MINUTES = 1_800_000;
 
     public HTTPSession(final SSLSocket socket, final int connId, final boolean localNetworkAccess, final HTTPServer httpServer) {
         sessionStartTime = System.currentTimeMillis();
@@ -73,7 +71,7 @@ public class HTTPSession implements Runnable {
     }
 
     public void handleSession() {
-        Thread myThread = new Thread(this);
+        myThread = new Thread(this);
         myThread.start();
     }
 
@@ -86,28 +84,30 @@ public class HTTPSession implements Runnable {
     }
 
     public void run() {
-        // why are we back to input/output streams? because java has no SSLSocketChannel, using them with SSLEngine is stupidly complex,
-        // and all the middleware libraries for SSL over channels are either broken, outdated, or require a major code rewrite
-        // may switch back to channels in the future if a decent library materializes, or I can be arsed to learn SSLEngine and
-        // implementing it does not require a major rewrite
-        BufferedReader reader = null;
+        // why are we back to input/output streams? because java has no SSLSocketChannel, using them with SSLEngine is stupidly complex, and all the middleware libraries for SSL over channels are either broken, outdated, or require a major code rewrite
+        // may switch back to channels in the future if a decent library materializes, or I can be arsed to learn SSLEngine and implementing it does not require a major rewrite
+        HTTPStreamReader reader = null;
         DataOutputStream writer = null;
         HTTPResponseProcessor httpResponseProcessor = null;
         String info = this + "\t";
 
         try {
-            socket.setSoTimeout(SOCKET_TIMEOUT_MILLISECONDS);
+            socket.setSoTimeout(10000);
 
-            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            reader = new HTTPStreamReader(new InputStreamReader(socket.getInputStream()));
             writer = new DataOutputStream(socket.getOutputStream());
+
             // read the header and parse the request - this will also update the response code and initialize the proper response processor
             String request = null;
+
             // ignore every single line except for the request one. we SSL now, so if there is no end-of-line, just wait for the timeout
             do {
                 String read = reader.readLine();
+
                 if (read != null) {
+
                     if (getheadPattern.matcher(read).matches()) {
-                        request = read.substring(0, Math.min(1000, read.length()));
+                        request = read;
                     } else if (read.isEmpty()) {
                         break;
                     }
@@ -117,7 +117,7 @@ public class HTTPSession implements Runnable {
             } while (true);
 
             httpResponse = new HTTPResponse(this);
-            httpResponse.parseRequest(request);
+            httpResponse.parseRequest(request, localNetworkAccess);
 
             // get the status code and response processor - in case of an error, this will be a text type with the error message
             httpResponseProcessor = httpResponse.getHTTPResponseProcessor();
@@ -144,22 +144,28 @@ public class HTTPSession implements Runnable {
 
             // write the header to the socket
             byte[] headerBytes = header.toString().getBytes(StandardCharsets.ISO_8859_1);
+
             if (request != null && contentLength > 0) {
                 try {
                     // buffer size might be limited by OS. for linux, check net.core.wmem_max
-                    int bufferSize = (int) Math.min(contentLength + headerBytes.length + 32,
-                            Math.min(Settings.isUseLessMemory() ? 131072 : 524288, Math.round(0.2 * Settings.getThrottleBytesPerSec())));
+                    int bufferSize = (int) Math.min(contentLength + headerBytes.length + 32, Math.min(Settings.isUseLessMemory() ? 131072 : 524288, Math.round(0.2 * Settings.getThrottleBytesPerSec())));
                     socket.setSendBufferSize(bufferSize);
+                    //Out.debug("Socket size for " + connId + " is now " + socket.getSendBufferSize() + " (requested " + bufferSize + ")");
                 } catch (Exception e) {
                     Out.info(e.getMessage());
                 }
             }
 
             HTTPBandwidthMonitor bwm = httpServer.getBandwidthMonitor();
+
             if (bwm != null && !localNetworkAccess) {
-                bwm.waitForQuota(headerBytes.length);
+                bwm.waitForQuota(myThread, headerBytes.length);
             }
+
             writer.write(headerBytes, 0, headerBytes.length);
+
+            //Out.debug("Wrote " +  headerBytes.length + " header bytes to socket for connId=" + connId + " with contentLength=" + contentLength);
+
             if (!localNetworkAccess) {
                 Stats.bytesSent(headerBytes.length);
             }
@@ -167,6 +173,7 @@ public class HTTPSession implements Runnable {
             if (httpResponse.isRequestHeadOnly()) {
                 // if this is a HEAD request, we are done
                 writer.flush();
+
                 info += "Code=" + statusCode + " ";
                 Out.info(info + (request == null ? "Invalid Request" : request));
             } else {
@@ -178,12 +185,12 @@ public class HTTPSession implements Runnable {
                 }
 
                 long startTime = System.currentTimeMillis();
+
                 if (contentLength > 0) {
                     int writtenBytes = 0;
                     int lastWriteLen;
 
-                    // bytebuffers returned by getPreparedTCPBuffer should never have a remaining() larger than Settings.TCP_PACKET_SIZE.
-                    // if that happens due to some bug, we will hit an IndexOutOfBounds exception during the get below
+                    // bytebuffers returned by getPreparedTCPBuffer should never have a remaining() larger than Settings.TCP_PACKET_SIZE. if that happens due to some bug, we will hit an IndexOutOfBounds exception during the get below
                     byte[] buffer = new byte[Settings.TCP_PACKET_SIZE];
 
                     while (writtenBytes < contentLength) {
@@ -192,11 +199,15 @@ public class HTTPSession implements Runnable {
                         lastWriteLen = tcpBuffer.remaining();
 
                         if (bwm != null && !localNetworkAccess) {
-                            bwm.waitForQuota(lastWriteLen);
+                            bwm.waitForQuota(myThread, lastWriteLen);
                         }
+
                         tcpBuffer.get(buffer, 0, lastWriteLen);
                         writer.write(buffer, 0, lastWriteLen);
                         writtenBytes += lastWriteLen;
+
+                        //Out.debug("Wrote " + lastWriteLen + " content bytes to socket for connId=" + connId + " with contentLength=" + contentLength);
+
                         if (!localNetworkAccess) {
                             Stats.bytesSent(lastWriteLen);
                         }
@@ -205,8 +216,7 @@ public class HTTPSession implements Runnable {
 
                 writer.flush();
 
-                // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers,
-                // so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
+                // while the outputstream is flushed and empty, the bytes may not have made it further than the OS network buffers, so the time calculated here is approximate at best and widely misleading at worst, especially if the BWM is disabled
                 long sendTime = System.currentTimeMillis() - startTime;
                 Out.info(info + "Finished processing request in "
                         + DECIMAL_FORMATTER.format(sendTime / 1000.0) + " seconds"
@@ -261,15 +271,15 @@ public class HTTPSession implements Runnable {
     public boolean doTimeoutCheck() {
         long nowtime = System.currentTimeMillis();
 
-        if (lastPacketSend < nowtime - ONE_SECOND && socket.isClosed()) {
+        if (lastPacketSend < nowtime - 1000 && socket.isClosed()) {
             // the connecion was already closed and should be removed by the HTTPServer instance.
             // the lastPacketSend check was added to prevent spurious "Killing stuck session" errors
             return true;
-        }
+        } else {
+            int startTimeout = httpResponse != null ? (httpResponse.isServercmd() ? 1800000 : 180000) : 30000;
 
-        int startTimeout = httpResponse != null ? (httpResponse.isServercmd() ? THIRTY_MINUTES : THREE_MINUTES) : THIRTY_SECONDS;
-        return (sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout)
-                || (lastPacketSend > 0 && lastPacketSend < nowtime - THIRTY_SECONDS);
+            return (sessionStartTime > 0 && sessionStartTime < nowtime - startTimeout) || (lastPacketSend > 0 && lastPacketSend < nowtime - 30000);
+        }
     }
 
     public void forceCloseSocket() {
@@ -285,6 +295,7 @@ public class HTTPSession implements Runnable {
     }
 
     // accessors
+
     public HTTPServer getHTTPServer() {
         return httpServer;
     }
@@ -296,4 +307,55 @@ public class HTTPSession implements Runnable {
     public String toString() {
         return "{" + connId + String.format("%1$-17s", getSocketInetAddress().toString() + "}");
     }
+
+    private static class HTTPStreamReader extends BufferedReader {
+        private static final int maxLen = 1000, CR = 13, LF = 10;
+
+        public HTTPStreamReader(InputStreamReader reader) {
+            super(reader);
+        }
+
+        public String readLine() throws java.io.IOException {
+            char[] buffer = new char[maxLen];
+            int currentIndex = 0;
+            int currentChar = read();
+
+            while ((currentChar != CR) && (currentChar != LF) && (currentChar >= 0) && (currentIndex < maxLen)) {
+                // not EOF or EOL; add to the buffer and keep reading
+                buffer[currentIndex++] = (char) currentChar;
+                currentChar = read();
+            }
+
+            if (currentChar < 0) {
+                // EOF; return the buffer, or null if no data has been read
+                return currentIndex > 0 ? new String(buffer, 0, currentIndex) : null;
+            }
+
+            if (currentChar == CR) {
+                // read one more char to check for LF, discard if so
+                mark(1);
+
+                if (read() != LF) {
+                    reset();
+                }
+            } else if (currentChar != LF) {
+                // we exited the loop without ending on a CR or LF, meaning we hit the maxLen limit; check if the next character is CR/LF and discard if so
+                mark(1);
+                currentChar = read();
+
+                if (currentChar == CR) {
+                    mark(1);
+
+                    if (read() != LF) {
+                        reset();
+                    }
+                } else if (currentChar != LF) {
+                    reset();
+                }
+            }
+
+            return new String(buffer, 0, currentIndex);
+        }
+    }
+
 }

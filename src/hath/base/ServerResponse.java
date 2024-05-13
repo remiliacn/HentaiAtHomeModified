@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,7 +17,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
@@ -59,7 +59,7 @@ public class ServerResponse {
     }
 
     private static ServerResponse getServerResponse(URL serverConnectionURL, ServerHandler retryhandler, String retryact) {
-        FileDownloader dler = new FileDownloader(serverConnectionURL, 3600000);
+        FileDownloader dler = new FileDownloader(serverConnectionURL, 3600000, 3600000);
         String serverResponse = dler.getResponseAsString("ASCII");
 
         if (serverResponse == null) {

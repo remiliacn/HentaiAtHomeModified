@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,13 +17,12 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.base;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
@@ -33,7 +32,6 @@ import java.security.MessageDigest;
 public class FileValidator {
     private MessageDigest messageDigest;
     private final ByteBuffer byteBuffer;
-    private static final int CAPACITY = 65536;
 
     public FileValidator() {
         try {
@@ -42,7 +40,7 @@ public class FileValidator {
             HentaiAtHomeClient.dieWithError(e);
         }
 
-        byteBuffer = ByteBuffer.allocateDirect(CAPACITY);
+        byteBuffer = ByteBuffer.allocateDirect(65536);
     }
 
     public boolean validateFile(Path path, String expectedSHA1Value) throws java.io.IOException {
@@ -69,7 +67,7 @@ public class FileValidator {
             if (fileChannel != null) {
                 try {
                     fileChannel.close();
-                } catch (IOException ignored) {
+                } catch (Exception ignored) {
                 }
             }
         }

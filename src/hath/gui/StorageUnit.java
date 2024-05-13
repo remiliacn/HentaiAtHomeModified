@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,59 +17,59 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home GUI.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home GUI.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.gui;
 
-import java.text.NumberFormat;
-
 public enum StorageUnit {
-    BYTE("B", 1L),
-    KILOBYTE("KB", 1L << 10),
-    MEGABYTE("MB", 1L << 20),
-    GIGABYTE("GB", 1L << 30),
-    TERABYTE("TB", 1L << 40),
-    PETABYTE("PB", 1L << 50),
-    EXABYTE("EB", 1L << 60);
+	BYTE     ( "B", 1L),
+	KILOBYTE ("KB", 1L << 10),
+	MEGABYTE ("MB", 1L << 20),
+	GIGABYTE ("GB", 1L << 30),
+	TERABYTE ("TB", 1L << 40),
+	PETABYTE ("PB", 1L << 50),
+	EXABYTE  ("EB", 1L << 60);
 
-    private final String symbol;
-    private final long divider;
+	public static final StorageUnit BASE = BYTE;
 
-    StorageUnit(String name, long divider) {
-        this.symbol = name;
-        this.divider = divider;
-    }
+	private final String symbol;
+	private final long divider;
 
-    public static StorageUnit of(final long number) {
-        final long n = number > 0 ? -number : number;
-        if (n > -(1L << 10)) {
-            return BYTE;
-        } else if (n > -(1L << 20)) {
-            return KILOBYTE;
-        } else if (n > -(1L << 30)) {
-            return MEGABYTE;
-        } else if (n > -(1L << 40)) {
-            return GIGABYTE;
-        } else if (n > -(1L << 50)) {
-            return TERABYTE;
-        } else if (n > -(1L << 60)) {
-            return PETABYTE;
-        } else {
-            return EXABYTE;
-        }
-    }
+	StorageUnit(String name, long divider) {
+		this.symbol = name;
+		this.divider = divider;
+	}
 
-    public String format(long number) {
-        return NUMBER_FORMAT.format((double) number / divider) + " " + symbol;
-    }
+	public static StorageUnit of(final long number) {
+		final long n = number > 0 ? -number : number;
+		if (n > -(1L << 10)) {
+			return BYTE;
+		} else if (n > -(1L << 20)) {
+			return KILOBYTE;
+		} else if (n > -(1L << 30)) {
+			return MEGABYTE;
+		} else if (n > -(1L << 40)) {
+			return GIGABYTE;
+		} else if (n > -(1L << 50)) {
+			return TERABYTE;
+		} else if (n > -(1L << 60)) {
+			return PETABYTE;
+		} else {  // n >= Long.MIN_VALUE
+			return EXABYTE;
+		}
+	}
 
-    private static final NumberFormat NUMBER_FORMAT = NumberFormat.getInstance();
+	public String format(long number) {
+		return nf.format((double)number / divider) + " " + symbol;
+	}
 
-    static {
-        NUMBER_FORMAT.setGroupingUsed(false);
-        NUMBER_FORMAT.setMinimumFractionDigits(2);
-        NUMBER_FORMAT.setMaximumFractionDigits(2);
-    }
+	private static java.text.NumberFormat nf = java.text.NumberFormat.getInstance();
+
+	static {
+		nf.setGroupingUsed(false);
+		nf.setMinimumFractionDigits(2);
+		nf.setMaximumFractionDigits(2);
+	}
 } 

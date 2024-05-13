@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,14 +17,16 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.base;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.net.Proxy;
 import java.net.SocketException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -34,46 +36,42 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 
+@SuppressWarnings("unused")
 public class FileDownloader implements Runnable {
+    private final int timeout;
     private int retries = 3;
+    private int contentLength = 0;
     private long timeDownloadStart = 0, timeFirstByte = 0, timeDownloadFinish = 0;
     private ByteBuffer byteBuffer = null;
     private HTTPBandwidthMonitor downloadLimiter = null;
     private Path outputPath = null;
     private final URL source;
-    private final int timeout;
-    private final Object downloadLock = new Object();
     private Thread myThread;
-    private boolean started = false;
-    private boolean discardData = false;
-    private boolean successful = false;
+    private final Object downloadLock = new Object();
+    private boolean started = false, discardData = false, successful = false, allowProxy = false;
 
-    private static final int ONE_SECOND = 1_000;
-    private static final int TEN_MB = 10_485_760;
-    private static final String SERVER_RETURNED_404_NOT_FOUND = "Server returned: 404 Not Found";
-    private static final String REPLY_EXCEEDS_EXPECTED_LENGTH = "Reply exceeds expected length";
-
-    public FileDownloader(final URL source, final int timeout) {
+    public FileDownloader(URL source, int timeout, int maxDLTime) {
         // everything will be written to a ByteBuffer
         this.source = source;
         this.timeout = timeout;
     }
 
-    public FileDownloader(URL source, int timeout, boolean discardData) {
+    public FileDownloader(URL source, int timeout, int maxDLTime, boolean discardData) {
         // if discardData is true, no buffer will be allocated and the data stream will be discarded
         this.source = source;
         this.timeout = timeout;
         this.discardData = discardData;
     }
 
-    public FileDownloader(URL source, int timeout, Path outputPath) {
+    public FileDownloader(URL source, int timeout, int maxDLTime, Path outputPath, boolean allowProxy) {
         // in this case, the data will be written directly to a channel specified by outputPath
         this.source = source;
         this.timeout = timeout;
         this.outputPath = outputPath;
+        this.allowProxy = allowProxy;
     }
 
-    public void setDownloadLimiter(final HTTPBandwidthMonitor limiter) {
+    public void setDownloadLimiter(HTTPBandwidthMonitor limiter) {
         downloadLimiter = limiter;
     }
 
@@ -100,19 +98,17 @@ public class FileDownloader implements Runnable {
     public boolean waitAsyncDownload() {
         // make sure the download thread has actually finished starting up
         try {
-            int timeout = ONE_SECOND;
+            int timeout = 1000;
 
             while (!started && (--timeout > 0)) {
-                Thread.sleep(ONE_SECOND);
+                Thread.sleep(1000);
             }
         } catch (InterruptedException ignored) {
         }
 
         // synchronize on the download lock to wait for the download attempts to complete before returning
         synchronized (downloadLock) {
-            Out.debug("Finished async wait for source=" + source + " with timeDownloadStart="
-                    + timeDownloadStart + " timeFirstByte=" + timeFirstByte + " timeDownloadFinish=" + timeDownloadFinish
-                    + " successful=" + successful);
+            Out.debug("Finished async wait for source=" + source + " with timeDownloadStart=" + timeDownloadStart + " timeFirstByte=" + timeFirstByte + " timeDownloadFinish=" + timeDownloadFinish + " successful=" + successful);
         }
 
         return successful;
@@ -140,6 +136,10 @@ public class FileDownloader implements Runnable {
         return timeFirstByte > 0 ? timeDownloadFinish - timeFirstByte : 0;
     }
 
+    public int getContentLength() {
+        return contentLength;
+    }
+
     public void run() {
         synchronized (downloadLock) {
             if (started) {
@@ -155,29 +155,22 @@ public class FileDownloader implements Runnable {
                 try {
                     Out.debug("Connecting to " + source.getHost() + "...");
 
-                    // should return a HttpURLConnection for http and HttpsURLConnection for https
-                    URLConnection connection = source.openConnection();
+                    URLConnection connection = getUrlConnection();
 
-                    connection.setConnectTimeout(5000);
-                    connection.setReadTimeout(timeout);
-                    connection.setRequestProperty("Connection", "Close");
-                    connection.setRequestProperty("User-Agent", "Hentai@Home " + Settings.CLIENT_VERSION);
-                    connection.connect();
-
-                    int contentLength = connection.getContentLength();
+                    contentLength = connection.getContentLength();
 
                     if (contentLength < 0) {
                         // since we control all systems in this case, we'll demand that clients and servers always send the Content-Length
                         Out.warning("Request host did not send Content-Length, aborting transfer." + " (" + connection + ")");
                         Out.warning("Note: A common reason for this is running firewalls with outgoing restrictions or programs like PeerGuardian/PeerBlock. Verify that the remote host is not blocked.");
                         throw new SocketException("Invalid or missing Content-Length");
-                    } else if (contentLength > TEN_MB && !discardData && outputPath == null) {
+                    } else if (contentLength > 10485760 && !discardData && outputPath == null) {
                         // if we're writing to a ByteBuffer, hard limit responses to 10MB
                         Out.warning("Reported contentLength " + contentLength + " exceeds max allowed size for memory buffer download");
-                        throw new SocketException(REPLY_EXCEEDS_EXPECTED_LENGTH);
+                        throw new SocketException("Reply exceeds expected length");
                     } else if (contentLength > Settings.getMaxAllowedFileSize()) {
                         Out.warning("Reported contentLength " + contentLength + " exceeds currently max allowed filesize " + Settings.getMaxAllowedFileSize());
-                        throw new SocketException(REPLY_EXCEEDS_EXPECTED_LENGTH);
+                        throw new SocketException("Reply exceeds expected length");
                     }
 
                     is = connection.getInputStream();
@@ -228,9 +221,8 @@ public class FileDownloader implements Runnable {
                                 timeFirstByte = System.currentTimeMillis();
                             }
 
-                            //noinspection StatementWithEmptyBody
                             if (discardData) {
-                                // Out.debug("Skipped " + readbytes + " bytes");
+                                //Out.debug("Skipped " + readbytes + " bytes");
                             } else if (outputPath == null) {
                                 byteBuffer.put(buffer, 0, readbytes);
                                 //Out.debug("Added " + readbytes + " bytes to byteBuffer");
@@ -243,7 +235,7 @@ public class FileDownloader implements Runnable {
                             writeoff += readbytes;
 
                             if (downloadLimiter != null) {
-                                downloadLimiter.waitForQuota(readbytes);
+                                downloadLimiter.waitForQuota(Thread.currentThread(), readbytes);
                             }
                         }
                     } while (readbytes > 0);
@@ -251,16 +243,16 @@ public class FileDownloader implements Runnable {
                     successful = writeoff == contentLength;
                     timeDownloadFinish = System.currentTimeMillis();
                     long dltime = getDownloadTimeMillis();
-                    Out.debug("Finished download for " + source + " in " + dltime
-                            + " ms" + (dltime > 0 ? ", speed=" + (writeoff / dltime) + "KB/s" : "")
+                    Out.debug("Finished download for " + source + " in " + dltime + " ms"
+                            + (dltime > 0 ? ", speed=" + (writeoff / dltime) + "KB/s" : "")
                             + ", writeoff=" + writeoff + ", successful=" + (successful ? "yes" : "no"));
                     Stats.bytesRcvd(contentLength);
                 } catch (Exception e) {
                     if (e instanceof java.io.FileNotFoundException) {
-                        Out.warning(SERVER_RETURNED_404_NOT_FOUND);
+                        Out.warning("Server returned: 404 Not Found");
                         break;
                     } else if (e.getCause() instanceof java.io.FileNotFoundException) {
-                        Out.warning(SERVER_RETURNED_404_NOT_FOUND);
+                        Out.warning("Server returned: 404 Not Found");
                         break;
                     }
 
@@ -291,5 +283,25 @@ public class FileDownloader implements Runnable {
                 Out.warning("Exhaused retries or aborted getting " + source);
             }
         }
+    }
+
+    private URLConnection getUrlConnection() throws IOException {
+        Proxy proxy = allowProxy ? Settings.getImageProxy() : null;
+
+        // should return a HttpURLConnection for http and HttpsURLConnection for https
+        URLConnection connection;
+
+        if (proxy != null) {
+            connection = source.openConnection(proxy);
+        } else {
+            connection = source.openConnection();
+        }
+
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(timeout);
+        connection.setRequestProperty("Connection", "Close");
+        connection.setRequestProperty("User-Agent", "Hentai@Home " + Settings.CLIENT_VERSION);
+        connection.connect();
+        return connection;
     }
 }

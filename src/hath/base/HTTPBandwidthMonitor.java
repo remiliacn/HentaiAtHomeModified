@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,38 +17,38 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.base;
 
+@SuppressWarnings("unused")
 public class HTTPBandwidthMonitor {
+    private static final int TIME_RESOLUTION = 50;
     private final int millisPerTick;
     private final int bytesPerTick;
     private final int[] tickBytes;
     private final int[] tickSeconds;
-    private static final int TIME_RESOLUTION = 50;
-    private static final int WINDOW_LENGTH = 5;
-    private static final int ONE_SECOND = 1000;
 
     public HTTPBandwidthMonitor() {
-        bytesPerTick = (int) Math.ceil((double) Settings.getThrottleBytesPerSec() / TIME_RESOLUTION);
+        bytesPerTick = (int) (double) (Settings.getThrottleBytesPerSec() / TIME_RESOLUTION);
         millisPerTick = 1000 / TIME_RESOLUTION;
         tickBytes = new int[TIME_RESOLUTION];
         tickSeconds = new int[TIME_RESOLUTION];
     }
 
-    public synchronized void waitForQuota(int bytecount) {
+    public synchronized void waitForQuota(Thread thread, int bytecount) {
         do {
             long now = System.currentTimeMillis();
-            long epochSeconds = now / ONE_SECOND;
-            int currentTick = (int) ((now - epochSeconds * ONE_SECOND) / millisPerTick);
+            long epochSeconds = now / 1000;
+            int currentTick = (int) ((now - epochSeconds * 1000) / millisPerTick);
             int currentSecond = (int) epochSeconds;
             int bytesThisTick = 0, bytesLastWindow = 0, bytesLastSecond = 0;
             int tickCounter = currentTick - TIME_RESOLUTION;
             int tickIndex, validSecond;
 
+            int windowLength = 5;
             while (++tickCounter <= currentTick) {
                 tickIndex = tickCounter < 0 ? TIME_RESOLUTION + tickCounter : tickCounter;
                 validSecond = tickCounter < 0 ? currentSecond - 1 : currentSecond;
@@ -57,7 +57,7 @@ public class HTTPBandwidthMonitor {
                     if (tickCounter == currentTick) {
                         bytesThisTick += tickBytes[tickIndex];
                     } else {
-                        if (tickCounter >= currentTick - WINDOW_LENGTH) {
+                        if (tickCounter >= currentTick - windowLength) {
                             bytesLastWindow += tickBytes[tickIndex];
                         }
 
@@ -67,8 +67,7 @@ public class HTTPBandwidthMonitor {
                 }
             }
 
-            if (bytesThisTick > bytesPerTick * 1.1 || bytesLastWindow > bytesPerTick * WINDOW_LENGTH * 1.05
-                    || bytesLastSecond > bytesPerTick * TIME_RESOLUTION) {
+            if (bytesThisTick > bytesPerTick * 1.1 || bytesLastWindow > bytesPerTick * windowLength * 1.05 || bytesLastSecond > bytesPerTick * TIME_RESOLUTION) {
                 //Out.debug("sleeping with currentTick=" + currentTick + " second=" + currentSecond + " bytesPerTick=" + bytesPerTick + " bytesThisTick=" + bytesThisTick + " bytesLastWindow=" + bytesLastWindow + " bytesLastSecond=" + bytesLastSecond);
 
                 try {

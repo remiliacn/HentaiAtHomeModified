@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,16 +17,16 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home GUI.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home GUI.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.gui;
 
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
+import javax.swing.*;
 
 import hath.base.Out;
 import hath.base.OutListener;
@@ -59,8 +59,10 @@ public class HHLogPane extends JPanel implements OutListener, ComponentListener 
 
         JScrollPane taHolder = new JScrollPane(textArea, JScrollPane.VERTICAL_SCROLLBAR_NEVER, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         taHolder.setPreferredSize(new Dimension(1000, 300));
+        //taHolder.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder("Program Output"), BorderFactory.createEmptyBorder(5,5,5,5)), taHolder.getBorder()));
 
         add(taHolder, BorderLayout.CENTER);
+
         Out.addOutListener(this);
         addComponentListener(this);
     }

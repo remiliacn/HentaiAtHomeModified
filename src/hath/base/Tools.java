@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,7 +17,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
@@ -28,6 +28,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -43,35 +44,35 @@ public class Tools {
 
     public static final String SHA_1 = "SHA-1";
 
-    public static File checkAndCreateDir(File dir) throws java.io.IOException {
+    public static File checkAndCreateDir(File dir) throws IOException {
         if (dir.isFile()) {
             dir.delete();
         }
 
         if (!dir.isDirectory()) {
             if (!dir.mkdirs()) {
-                throw new java.io.IOException("Could not create directory " + dir + "; check permissions and I/O errors.");
+                throw new IOException("Could not create directory " + dir + "; check permissions and I/O errors.");
             }
         }
 
         return dir;
     }
 
-    public static String getStringFileContents(File file) throws java.io.IOException {
+    public static String getStringFileContents(File file) throws IOException {
         char[] cbuf = new char[(int) file.length()];
-        java.io.FileReader fr = new FileReader(file);
+        FileReader fr = new FileReader(file);
         fr.read(cbuf);
         fr.close();
         return new String(cbuf);
     }
 
-    public static void putStringFileContents(File file, String content) throws java.io.IOException {
-        java.io.FileWriter fw = new FileWriter(file);
+    public static void putStringFileContents(File file, String content) throws IOException {
+        FileWriter fw = new FileWriter(file);
         fw.write(content);
         fw.close();
     }
 
-    public static void putStringFileContents(File file, String content, String charset) throws java.io.IOException {
+    public static void putStringFileContents(File file, String content, String charset) throws IOException {
         int fileLength = content.length();
         BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), charset));
         bw.write(content, 0, fileLength);
@@ -88,7 +89,7 @@ public class Tools {
         return files;
     }
 
-    public static Hashtable<String, String> parseAdditional(final String additional) {
+    public static Hashtable<String, String> parseAdditional(String additional) {
         Hashtable<String, String> addTable = new Hashtable<>();
 
         if (additional != null) {
@@ -143,14 +144,14 @@ public class Tools {
             hash = binaryToHex(messageDigest.digest());
         } catch (java.security.NoSuchAlgorithmException e) {
             HentaiAtHomeClient.dieWithError(e);
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             Out.warning("Failed to calculate SHA-1 hash of file " + fileToHash + ": " + e.getMessage());
         } finally {
             try {
                 if (fileChannel != null) {
                     fileChannel.close();
                 }
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
         }
 

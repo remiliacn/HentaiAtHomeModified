@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,15 +17,17 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.base;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.net.Proxy;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
@@ -48,13 +50,8 @@ public class ProxyFileDownloader implements Runnable {
     private URLConnection connection;
     private final Thread myThread;
     private MessageDigest sha1Digest;
-    private int readoff;
-    private int writeoff;
-    private int contentLength;
-    private boolean streamThreadSuccess = false;
-    private boolean streamThreadComplete = false;
-    private boolean proxyThreadComplete = false;
-    private boolean fileFinalized = false;
+    private int readoff, writeoff, contentLength;
+    private boolean streamThreadSuccess = false, streamThreadComplete = false, proxyThreadComplete = false, fileFinalized = false;
     private final Object downloadLock = new Object();
 
     public ProxyFileDownloader(HentaiAtHomeClient client, String fileid, URL[] sources) {
@@ -79,7 +76,14 @@ public class ProxyFileDownloader implements Runnable {
             try {
                 Out.debug("ProxyFileDownloader\tRequesting file download from " + source);
 
-                connection = source.openConnection();
+                Proxy proxy = Settings.getImageProxy();
+
+                if (proxy != null) {
+                    connection = source.openConnection(proxy);
+                } else {
+                    connection = source.openConnection();
+                }
+
                 connection.setConnectTimeout(5000);
                 connection.setReadTimeout(30000);
                 connection.setRequestProperty("Hath-Request", Settings.getClientID() + "-" + Tools.getSHA1String(Settings.getClientKey() + fileid));
@@ -129,7 +133,7 @@ public class ProxyFileDownloader implements Runnable {
                     if (fileHandle != null) {
                         fileHandle.close();
                     }
-                } catch (Exception ignored) {
+                } catch (IOException ignored) {
                 }
             }
         }
@@ -147,6 +151,7 @@ public class ProxyFileDownloader implements Runnable {
             do {
 
                 try (InputStream is = connection.getInputStream(); ReadableByteChannel rbc = Channels.newChannel(is)) {
+
                     long downloadStart = System.currentTimeMillis();
                     int readcount;    // the number of bytes in the last read
                     int writecount;    // the number of bytes in the last write
@@ -156,6 +161,7 @@ public class ProxyFileDownloader implements Runnable {
                         if (is.available() > 0) {
                             time = 0;
                             readcount = rbc.read(byteBuffer);
+                            //Out.debug("Read " + readcount + " bytes from upstream server");
 
                             if (readcount >= 0) {
                                 readoff += readcount;
@@ -169,6 +175,7 @@ public class ProxyFileDownloader implements Runnable {
                                     writecount = fileChannel.write(byteBuffer, writeoff);
                                     writeoff += writecount;
                                     Stats.bytesRcvd(writecount);
+                                    //Out.debug("Wrote " + writecount + " bytes to " + tempFile);
                                     byteBuffer.clear();
                                 }
                             } else {
@@ -253,34 +260,28 @@ public class ProxyFileDownloader implements Runnable {
         if (fileChannel != null) {
             try {
                 fileChannel.close();
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
         }
 
         if (fileHandle != null) {
             try {
                 fileHandle.close();
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
             }
         }
 
         if (tempFile.length() != getContentLength()) {
-            Out.debug("Requested file " + fileid + " is incomplete, and will not be stored. (bytes=" + tempFile.length() + ")");
+            Out.debug("Proxy-downloaded file " + fileid + " is incomplete, and will not be stored. (bytes=" + tempFile.length() + ")");
         } else {
             String sha1Hash = Tools.binaryToHex(sha1Digest.digest());
 
             if (!requestedHVFile.getHash().equals(sha1Hash)) {
-                Out.debug("Requested file " + fileid + " is corrupt, and will not be stored. (digest=" + sha1Hash + ")");
-            } else if (!Settings.isStaticRange(fileid)) {
-                Out.debug("The file " + fileid + " is not in a static range, and will not be stored.");
+                Out.debug("Proxy-downloaded file " + fileid + " is corrupt, and will not be stored. (digest=" + sha1Hash + ")");
+            } else if (client.getCacheHandler().importFile(tempFile, requestedHVFile)) {
+                Out.debug("Proxy-downloaded file " + fileid + " was successfully stored in cache.");
             } else {
-                if (client.getCacheHandler().importFile(tempFile, requestedHVFile)) {
-                    Out.info("Requested file " + fileid + " was successfully stored in cache.");
-                } else {
-                    Out.info("Requested file " + fileid + " exists or cannot be cached.");
-                }
-
-                Out.info("Proxy file download request complete for " + fileid);
+                Out.debug("Proxy-downloaded file " + fileid + " exists or could not be imported to the cache.");
             }
         }
 

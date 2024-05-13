@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008-2023 E-Hentai.org
+Copyright 2008-2024 E-Hentai.org
 https://forums.e-hentai.org/
 tenboro@e-hentai.org
 
@@ -17,13 +17,12 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Hentai@Home GUI.  If not, see <http://www.gnu.org/licenses/>.
+along with Hentai@Home GUI.  If not, see <https://www.gnu.org/licenses/>.
 
 */
 
 package hath.gui;
 
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -31,6 +30,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import javax.swing.*;
 
 import hath.base.HathGUI;
 import hath.base.HentaiAtHomeClient;
@@ -39,18 +39,11 @@ import hath.base.Settings;
 import hath.base.Stats;
 
 public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionListener, WindowListener, MouseListener, Runnable {
-    private final HentaiAtHomeClient client;
-    private final HHControlPane controlPane;
-    private final HHLogPane logPane;
-    private final JMenuItem refresh_settings;
-    private final JMenuItem suspend_resume;
-    private final JMenuItem suspend_5min;
-    private final JMenuItem suspend_15min;
-    private final JMenuItem suspend_30min;
-    private final JMenuItem suspend_1hr;
-    private final JMenuItem suspend_2hr;
-    private final JMenuItem suspend_4hr;
-    private final JMenuItem suspend_8hr;
+    private HentaiAtHomeClient client;
+    private HHControlPane controlPane;
+    private HHLogPane logPane;
+    private Thread myThread;
+    private JMenuItem refresh_settings, suspend_resume, suspend_5min, suspend_15min, suspend_30min, suspend_1hr, suspend_2hr, suspend_4hr, suspend_8hr;
     private TrayIcon trayIcon;
     private boolean trayFirstMinimize;
     private long lastSettingRefresh = 0;
@@ -175,7 +168,7 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
 
         lastSettingRefresh = System.currentTimeMillis();
 
-        Thread myThread = new Thread(this);
+        myThread = new Thread(this);
         myThread.start();
 
         try {
@@ -201,7 +194,7 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
                 setSuspendEnabled(true);
             }
 
-            if (!refresh_settings.isEnabled() && lastSettingRefresh < System.currentTimeMillis() - 60_000) {
+            if (!refresh_settings.isEnabled() && lastSettingRefresh < System.currentTimeMillis() - 60000) {
                 refresh_settings.setEnabled(true);
             }
 
@@ -215,9 +208,7 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
     }
 
     public void notifyError(String reason) {
-        JOptionPane.showMessageDialog(this, reason
-                        + "\n\nFor more information, look in the log files found in the data directory.",
-                "Hentai@Home has encountered an error", JOptionPane.ERROR_MESSAGE);
+        JOptionPane.showMessageDialog(this, reason + "\n\nFor more information, look in the log files found in the data directory.", "Hentai@Home has encountered an error", JOptionPane.ERROR_MESSAGE);
     }
 
     // ActionListener for the JMenuBar
@@ -255,13 +246,17 @@ public class HentaiAtHomeClientGUI extends JFrame implements HathGUI, ActionList
     }
 
     public void windowClosing(WindowEvent e) {
-        setVisible(false);
+        if (isVisible()) {
+            setVisible(false);
 
-        if (trayFirstMinimize) {
-            trayFirstMinimize = false;
-            trayIcon.displayMessage("Hentai@Home is still running",
-                    "Click here when you wish to show the Hentai@Home Client",
-                    TrayIcon.MessageType.INFO);
+            if (trayFirstMinimize) {
+                trayFirstMinimize = false;
+                trayIcon.displayMessage("Hentai@Home is still running", "Click here when you wish to show the Hentai@Home Client", TrayIcon.MessageType.INFO);
+            }
+        } else if (client != null) {
+            new GUIThreaded(client, GUIThreaded.ACTION_SHUTDOWN);
+        } else {
+            System.exit(0);
         }
     }
 
